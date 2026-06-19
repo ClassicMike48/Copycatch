@@ -1,31 +1,37 @@
-use image::{ImageFormat, ImageReader};
 use std::env;
 use std::{
     fs::{self, DirEntry},
     io,
     path::Path,
 };
+
 // create a file walker that will visit all files in a tree
 //recursive function
-
 fn print_file_name(file: &DirEntry) {
     println!("{}", file.file_name().display());
 }
 
+//TODO consider adding a cryptographic hash for exact file detection
 fn print_path(file: &DirEntry) {
     let path = file.path();
-    if let Ok(image) = ImageReader::open(&path) {
-        if let Ok(image) = image.decode() {
-            //Process raw image
-        } else {
-            println!("{} not a supported image type.", file.file_name().display());
-            print!(
-                "- Supported types include [Png, Jpeg, Gif, WebP, Pnm, Tiff, Tga, Dds, Bmp, Ico, Hdr, OpenExr, Farbfeld, Avif, Qoi]",
-            )
+    match image::open(&path) {
+        Ok(image) => {
+            let phash = imagehash::perceptual_hash(&image);
+            print!("{}", phash);
         }
-    } else {
-        println!("Error occurred while trying to read from {}", path.display())
+        Err(_) => println!(
+            "Error occurred while trying to read from {}",
+            path.display()
+        ),
     }
+}
+
+fn calculate_hamming_distance(hash1: &imagehash::Hash, hash2: &imagehash::Hash) -> usize {
+    let bits1 = &hash1.bits;
+    let bits2 = &hash2.bits;
+    
+    let count = bits1.iter().zip(bits2.iter()).filter(|(a, b)| a != b).count();
+    return count;
 }
 
 fn visit_directory(dir_path: &Path, action: &dyn Fn(&DirEntry)) -> io::Result<()> {
@@ -49,7 +55,7 @@ fn main() {
     if args.len() < 2 {
         // No directory provided, use default
         println!("No path provided, using default directory: 'test'");
-        let _ = visit_directory(Path::new("test"), &print_path);
+        let _ = visit_directory(Path::new("test"), &print_file_name);
     } else {
         let dir_path = &args[1];
         let _ = visit_directory(Path::new(dir_path), &print_file_name);
