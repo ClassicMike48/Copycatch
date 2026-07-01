@@ -1,64 +1,9 @@
 use std::env;
-use std::{
-    fs::{self, DirEntry},
-    io,
-    path::Path,
-};
-use image::DynamicImage;
-use sha2::{Digest, Sha256};
+use std::path::Path;
+use crate::file_walk::{get_phash,print_file_name,visit_directory};
 
-// create a file walker that will visit all files in a tree
-//recursive function
-fn print_file_name(file: &DirEntry) {
-    println!("{}", file.file_name().display());
-}
 
-//TODO consider adding a cryptographic hash for exact file detection
-//utilize SHA-256 
-fn get_crypto_hash(image: &DynamicImage) -> String {
-    let data = image.as_bytes();
-    let hash = Sha256::digest(data);
-    hash.iter().map(|b| format!("{:02x}", b)).collect()
-}
-fn get_phash(file: &DirEntry) {
-    let path = file.path();
-    match image::open(&path) {
-        Ok(image) => {
-            let phash = imagehash::perceptual_hash(&image);
-            phash.to_string();
-            let sha = get_crypto_hash(&image);
-            println!("{}\n- phash: {}\n- sha256: {}", path.display(), phash, sha);
-        }
-        Err(_) => println!(
-            "Error occurred while trying to read from {}",
-            path.display()
-        ),
-    }
-}
-
-fn calculate_hamming_distance(hash1: &imagehash::Hash, hash2: &imagehash::Hash) -> usize {
-    let bits1 = &hash1.bits;
-    let bits2 = &hash2.bits;
-    
-    let count = bits1.iter().zip(bits2.iter()).filter(|(a, b)| a != b).count();
-    return count;
-}
-
-fn visit_directory(dir_path: &Path, action: &dyn Fn(&DirEntry)) -> io::Result<()> {
-    if dir_path.is_dir() {
-        for entry in fs::read_dir(dir_path)? {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                if path.is_dir() {
-                    visit_directory(&path, action)?;
-                } else {
-                    action(&entry);
-                }
-            }
-        }
-    }
-    Ok(())
-}
+mod file_walk;
 fn main() {
     let args: Vec<String> = env::args().collect();
     println!("{:?}", args);
