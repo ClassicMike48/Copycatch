@@ -1,7 +1,8 @@
-use image::{ImageError};
+use image::ImageError;
 use sha2::{Digest, Sha256};
 use std::{
-    fs::{self, DirEntry},
+    collections::HashMap,
+    fs::{self, DirEntry,},
     io,
     path::Path,
 };
@@ -14,11 +15,6 @@ pub fn print_file_name(file: &DirEntry) {
 
 //TODO consider adding a cryptographic hash for exact file detection
 //utilize SHA-256
-// pub fn get_crypto_hash(image: &DynamicImage) -> String {
-//     let data = image.as_bytes();
-//     let hash = Sha256::digest(data);
-//     hash.iter().map(|b| format!("{:02x}", b)).collect()
-// }
 
 pub fn get_crypto_hash(file: &DirEntry) -> Result<String, ImageError> {
     let path = file.path();
@@ -84,3 +80,28 @@ pub fn visit_directory(dir_path: &Path, action: &dyn Fn(&DirEntry)) -> io::Resul
     Ok(())
 }
 
+pub fn analyze_folder(dir_path: &Path, map: &mut HashMap<String, Vec<String>>) -> io::Result<()> {
+    if dir_path.is_dir() {
+        for entry in fs::read_dir(dir_path)? {
+            if let Ok(entry) = entry {
+                let path = entry.path();
+                if path.is_dir() {
+                    //recur through the rest of the file tree
+                    analyze_folder(&path, map)?;
+                } else {
+                    //entry is a file
+                    //check for an image file and operate
+                    if let Ok(hash) = get_crypto_hash(&entry) {
+                        let images = map.entry(hash).or_insert(Vec::new());
+                        //Debugging
+                        if images.len() > 0 {
+                            println!("Duplicate detected: {}", path.display());
+                        }
+                        images.push(path.display().to_string());
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
