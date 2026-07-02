@@ -10,10 +10,10 @@ fn main() {
     if args.len() < 2 {
         // No directory provided, use default
         println!("No path provided, using default directory: 'test'");
-        let _ = visit_directory(Path::new("test"), &get_phash);
+        visit_directory(Path::new("test"), &get_phash);
     } else {
         let dir_path = &args[1];
-        let _ = visit_directory(Path::new(dir_path), &print_file_name);
+        visit_directory(Path::new(dir_path), &print_file_name);
     }
 }
 //Hash outputs in lowercase hex

@@ -1,4 +1,4 @@
-use image::{DynamicImage, ImageError};
+use image::{ImageError};
 use sha2::{Digest, Sha256};
 use std::{
     fs::{self, DirEntry},
@@ -83,3 +83,4 @@ pub fn visit_directory(dir_path: &Path, action: &dyn Fn(&DirEntry)) -> io::Resul
     }
     Ok(())
 }
+
