@@ -97,8 +97,11 @@ pub fn analyze_folder(dir_path: &Path, map: &mut HashMap<String, Vec<String>>) -
                         //Debugging
                         if images.len() > 0 {
                             println!("Duplicate detected: {}", path.display());
+                        } else {
+                            std::fs::copy(path, to);
                         }
                         images.push(path.display().to_string());
+                        
                     }
                 }
             }

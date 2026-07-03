@@ -7,7 +7,14 @@ use log::{info};
 use crate::file_walk::{analyze_folder, print_file_name, visit_directory};
 
 mod file_walk;
+
+struct Config {
+    images_map: HashMap<String, Vec<String>>,
+    backup_location: Path,
+}
 fn main() {
+    //Default location to store file backups -- prompt user
+
     //Setup program logger
     env_logger::builder()
         .format(|buff, record| writeln!(buff, "{}: {}", record.level(), record.args()))
@@ -20,7 +27,9 @@ fn main() {
     if args.len() < 2 {
         // No directory provided, use default
         info!("No path provided, using default directory: 'test'");
-        let mut pic_map = HashMap::new();
+        let config = Config{images_map: HashMap::new(), backup_location: Path::new("backup")}
+
+
         analyze_folder(Path::new("test"), &mut pic_map).unwrap();
         
         info!("Displaying results of search...");
