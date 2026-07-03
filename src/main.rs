@@ -1,19 +1,29 @@
 use std::path::Path;
 use std::{collections::HashMap, env};
 
+use log::LevelFilter;
+use std::io::Write;
+use log::{info};
 use crate::file_walk::{analyze_folder, print_file_name, visit_directory};
 
 mod file_walk;
 fn main() {
+    //Setup program logger
+    env_logger::builder()
+        .format(|buff, record| writeln!(buff, "{}: {}", record.level(), record.args()))
+        .filter(None, LevelFilter::Info)
+        .write_style(env_logger::WriteStyle::Auto) //For security, logging user input should be sanitized or use WriteStyle::never
+        .init();
+
     let args: Vec<String> = env::args().collect();
     println!("{:#?}", args);
     if args.len() < 2 {
         // No directory provided, use default
-        println!("No path provided, using default directory: 'test'");
-        // visit_directory(Path::new("test"), &get_phash);
+        info!("No path provided, using default directory: 'test'");
         let mut pic_map = HashMap::new();
         analyze_folder(Path::new("test"), &mut pic_map).unwrap();
-        // println!("{:?}", pic_map);
+        
+        info!("Displaying results of search...");
         for (k, v) in pic_map.drain() {
             println!("Hash: {} - Files: [{}]", k, v.join(", "))
         }

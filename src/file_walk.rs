@@ -1,4 +1,5 @@
 use image::ImageError;
+use log::warn;
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
@@ -26,7 +27,7 @@ pub fn get_crypto_hash(file: &DirEntry) -> Result<String, ImageError> {
             Ok(result)
         }
         Err(e) => {
-            println!(
+            warn!(
                 "Error occurred while trying to read from {}",
                 path.display()
             );
@@ -42,7 +43,7 @@ pub fn get_phash(file: &DirEntry) -> Result<String, ImageError> {
             Ok(phash.to_string())
         }
         Err(e) => {
-            println!(
+            warn!(
                 "Error occurred while trying to read from {}",
                 path.display()
             );
