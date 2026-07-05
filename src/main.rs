@@ -1,16 +1,15 @@
-use std::path::Path;
+use std::path::{PathBuf, Path};
 use std::{collections::HashMap, env};
 
-use log::LevelFilter;
-use std::io::Write;
-use log::{info};
 use crate::file_walk::{analyze_folder, print_file_name, visit_directory};
-
+use log::LevelFilter;
+use log::info;
+use std::io::Write;
 mod file_walk;
 
 struct Config {
     images_map: HashMap<String, Vec<String>>,
-    backup_location: Path,
+    backup_location: PathBuf,
 }
 fn main() {
     //Default location to store file backups -- prompt user
@@ -27,13 +26,15 @@ fn main() {
     if args.len() < 2 {
         // No directory provided, use default
         info!("No path provided, using default directory: 'test'");
-        let config = Config{images_map: HashMap::new(), backup_location: Path::new("backup")}
+        let mut config = Config {
+            images_map: HashMap::new(),
+            backup_location: Path::new("backup/").to_path_buf(),
+        };
+        println!("{}", config.backup_location.is_dir());
+        analyze_folder(Path::new("test"), &mut config).unwrap();
 
-
-        analyze_folder(Path::new("test"), &mut pic_map).unwrap();
-        
         info!("Displaying results of search...");
-        for (k, v) in pic_map.drain() {
+        for (k, v) in config.images_map.iter() {
             println!("Hash: {} - Files: [{}]", k, v.join(", "))
         }
     } else {

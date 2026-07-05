@@ -1,12 +1,13 @@
 use image::ImageError;
-use log::warn;
+use log::{info, warn};
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
-    fs::{self, DirEntry,},
+    fs::{self, DirEntry},
     io,
     path::Path,
 };
+use crate::Config;
 
 // create a file walker that will visit all files in a tree
 //recursive function
@@ -81,27 +82,36 @@ pub fn visit_directory(dir_path: &Path, action: &dyn Fn(&DirEntry)) -> io::Resul
     Ok(())
 }
 
-pub fn analyze_folder(dir_path: &Path, map: &mut HashMap<String, Vec<String>>) -> io::Result<()> {
+pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
     if dir_path.is_dir() {
         for entry in fs::read_dir(dir_path)? {
             if let Ok(entry) = entry {
                 let path = entry.path();
                 if path.is_dir() {
                     //recur through the rest of the file tree
-                    analyze_folder(&path, map)?;
+                    analyze_folder(&path, config)?;
                 } else {
                     //entry is a file
                     //check for an image file and operate
                     if let Ok(hash) = get_crypto_hash(&entry) {
-                        let images = map.entry(hash).or_insert(Vec::new());
+                        let images = config.images_map.entry(hash).or_insert(Vec::new());
                         //Debugging
                         if images.len() > 0 {
-                            println!("Duplicate detected: {}", path.display());
+                            info!("Duplicate detected: {}", path.display());
                         } else {
-                            std::fs::copy(path, to);
+                            //Not a duplicate photo that has been previously seen
+                            //TODO Refactor into new helper function
+                            let Some(original_file_name) = path.file_name() else {
+                                return Err(io::Error::new(
+                                    io::ErrorKind::InvalidInput,
+                                    format!("Could not determine file name for {}", path.display()),
+                                ));
+                            };
+                            let new_path = config.backup_location.join(original_file_name);
+                            std::fs::copy(&path, new_path)?;
                         }
+                        //Document the hash value, even if its a duplicate 
                         images.push(path.display().to_string());
-                        
                     }
                 }
             }
