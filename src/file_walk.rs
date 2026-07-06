@@ -94,21 +94,14 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
                     //entry is a file
                     //check for an image file and operate
                     if let Ok(hash) = get_crypto_hash(&entry) {
-                        let images = config.images_map.entry(hash).or_insert(Vec::new());
+                        let images = config.images_map.entry(hash.clone()).or_insert(Vec::new());
                         //Debugging
                         if images.len() > 0 {
                             info!("Duplicate detected: {}", path.display());
                         } else {
                             //Not a duplicate photo that has been previously seen
-                            //TODO Refactor into new helper function
-                            let Some(original_file_name) = path.file_name() else {
-                                return Err(io::Error::new(
-                                    io::ErrorKind::InvalidInput,
-                                    format!("Could not determine file name for {}", path.display()),
-                                ));
-                            };
-                            let new_path = config.backup_location.join(original_file_name);
-                            std::fs::copy(&path, new_path)?;
+                            //TODO Current setup doesn't factor in previous runs of the program. This will lead to duplications unless the hashmap is updated prior to rerunning. Further pushing the importance of a database.
+                            backup_file(&path, &config.backup_location)?;
                         }
                         //Document the hash value, even if its a duplicate
                         images.push(path.display().to_string());
@@ -120,8 +113,51 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
     Ok(())
 }
 
+fn backup_file(source_path: &Path, destination_folder: &Path) -> io::Result<()> {
+    let Some(original_file_name) = source_path.file_name() else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "Could not determine file name for {}",
+                source_path.display()
+            ),
+        ));
+    };
+    let destination_path = unique_backup_path(destination_folder, original_file_name);
+    std::fs::copy(source_path, destination_path)?;
+    Ok(())
+}
+// If a file with the same name already exists in the backup folder (but isn't a
+// hash duplicate), disambiguate by appending a short number suffix to the name.
+fn unique_backup_path(backup_dir: &Path, original_file_name: &std::ffi::OsStr) -> PathBuf {
+    let candidate = backup_dir.join(original_file_name);
+    if !candidate.exists() {
+        return candidate;
+    }
+
+    //Parse file name into various components
+    let name_path = Path::new(original_file_name);
+    let stem = name_path //filename without extension
+        .file_stem()
+        .unwrap_or(original_file_name)
+        .to_string_lossy();
+    let extension = name_path.extension().map(|ext| ext.to_string_lossy());
+
+    //Keep generating suffix until a unique one is produced
+    for n in 1.. {
+        let candidate = match &extension {
+            Some(ext) => backup_dir.join(format!("{}_{}.{}", stem, n, ext)),
+            None => backup_dir.join(format!("{}_{}", stem, n)),
+        };
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    unreachable!()
+}
+
 //encapsulate runtime checking of backup folder existing and available for operations
-//Can be later expanded to check for previous program save states, 
+//Can be later expanded to check for previous program save states, and improved error messaging.
 pub fn validate_save_location(dir_path: &PathBuf) -> Result<(), std::io::Error> {
     match dir_path.try_exists() {
         Ok(found) => {

@@ -1,4 +1,4 @@
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 use std::{collections::HashMap, env};
 
 use crate::file_walk::{analyze_folder, print_file_name, validate_save_location, visit_directory};
@@ -31,6 +31,7 @@ fn main() {
             backup_location: Path::new("backup/").to_path_buf(),
         };
         println!("{}", config.backup_location.is_dir());
+
         //Validate the location for copying files
         validate_save_location(&config.backup_location).unwrap();
         analyze_folder(Path::new("test"), &mut config).unwrap();
