@@ -1,13 +1,13 @@
+use crate::Config;
 use image::ImageError;
-use log::{info, warn};
+use log::{error, info, warn};
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     fs::{self, DirEntry},
-    io,
-    path::Path,
+    io::{self, Error},
+    path::{Path, PathBuf},
 };
-use crate::Config;
 
 // create a file walker that will visit all files in a tree
 //recursive function
@@ -110,7 +110,7 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
                             let new_path = config.backup_location.join(original_file_name);
                             std::fs::copy(&path, new_path)?;
                         }
-                        //Document the hash value, even if its a duplicate 
+                        //Document the hash value, even if its a duplicate
                         images.push(path.display().to_string());
                     }
                 }
@@ -118,4 +118,25 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+//encapsulate runtime checking of backup folder existing and available for operations
+//Can be later expanded to check for previous program save states, 
+pub fn validate_save_location(dir_path: &PathBuf) -> Result<(), std::io::Error> {
+    match dir_path.try_exists() {
+        Ok(found) => {
+            if found {
+                return Ok(());
+            } else {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("Directory does not exist: {}", dir_path.display()),
+                ));
+            }
+        }
+        Err(e) => {
+            error!("Issues verifying backup folder: {}", dir_path.display());
+            return Err(e);
+        }
+    }
 }
