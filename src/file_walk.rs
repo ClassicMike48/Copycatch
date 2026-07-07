@@ -94,17 +94,30 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
                     //entry is a file
                     //check for an image file and operate
                     if let Ok(hash) = get_crypto_hash(&entry) {
-                        let images = config.images_map.entry(hash.clone()).or_insert(Vec::new());
-                        //Debugging
-                        if images.len() > 0 {
+                        let path_string = path.display().to_string();
+                        let already_known = config.images_map.contains_key(&hash);
+                        if already_known {
                             info!("Duplicate detected: {}", path.display());
                         } else {
-                            //Not a duplicate photo that has been previously seen
-                            //TODO Current setup doesn't factor in previous runs of the program. This will lead to duplications unless the hashmap is updated prior to rerunning. Further pushing the importance of a database.
-                            backup_file(&path, &config.backup_location)?;
+                            //Not a duplicate photo that has been previously seen,
+                            //including across previous runs of the program (see db module)
+                            let backup_file_name = backup_file(&path, &config.backup_location)?;
+                            //Persist so this hash is known on subsequent runs
+                            if let Err(e) = crate::db::record_file(&config.conn, &hash, &path_string)
+                            {
+                                warn!(
+                                    "Failed to persist hash record for {}: {}",
+                                    path.display(),
+                                    e
+                                );
+                            }
                         }
                         //Document the hash value, even if its a duplicate
-                        images.push(path.display().to_string());
+                        config
+                            .images_map
+                            .entry(hash.clone())
+                            .or_insert_with(Vec::new)
+                            .push(path_string);
                     }
                 }
             }
@@ -113,7 +126,7 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
     Ok(())
 }
 
-fn backup_file(source_path: &Path, destination_folder: &Path) -> io::Result<()> {
+fn backup_file(source_path: &Path, destination_folder: &Path) -> io::Result<PathBuf> {
     let Some(original_file_name) = source_path.file_name() else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -124,8 +137,8 @@ fn backup_file(source_path: &Path, destination_folder: &Path) -> io::Result<()> 
         ));
     };
     let destination_path = unique_backup_path(destination_folder, original_file_name);
-    std::fs::copy(source_path, destination_path)?;
-    Ok(())
+    std::fs::copy(&source_path, &destination_path)?;
+    Ok(destination_path)
 }
 // If a file with the same name already exists in the backup folder (but isn't a
 // hash duplicate), disambiguate by appending a short number suffix to the name.
