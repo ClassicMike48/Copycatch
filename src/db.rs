@@ -1,7 +1,6 @@
-use rusqlite::{Connection, Result};
-use std::collections::HashMap;
-use std::path::Path;
 use log::info;
+use rusqlite::{Connection, Result};
+use std::path::Path;
 
 pub fn init(db_path: &Path) -> Result<Connection> {
     let conn = Connection::open(db_path)?;
@@ -21,20 +20,6 @@ pub fn init(db_path: &Path) -> Result<Connection> {
     Ok(conn)
 }
 
-pub fn load_known_hashes(conn: &Connection) -> Result<HashMap<String, Vec<String>>> {
-    let mut stmt = conn.prepare("SELECT hash, file_path FROM image_hashes")?;
-    let rows = stmt.query_map((), |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    })?;
-
-    let mut map: HashMap<String, Vec<String>> = HashMap::new();
-    for row in rows {
-        let (hash, file_path) = row?;
-        map.entry(hash).or_insert_with(Vec::new).push(file_path);
-    }
-    Ok(map)
-}
-
 pub fn record_file(conn: &Connection, hash: &str, file_path: &str) -> Result<()> {
     info!("File to record: {}", file_path);
     conn.execute(
@@ -42,4 +27,12 @@ pub fn record_file(conn: &Connection, hash: &str, file_path: &str) -> Result<()>
         (hash, file_path),
     )?;
     Ok(())
+}
+
+pub fn hash_exists(conn: &Connection, hash: &str) -> Result<bool> {
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM image_hashes WHERE hash = ?1)",
+        [hash],
+        |row| row.get(0),
+    )
 }

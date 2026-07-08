@@ -1,5 +1,5 @@
+use std::env;
 use std::path::{Path, PathBuf};
-use std::{collections::HashMap, env};
 
 use crate::file_walk::{analyze_folder, print_file_name, validate_save_location, visit_directory};
 use log::LevelFilter;
@@ -10,9 +10,21 @@ mod db;
 mod file_walk;
 
 struct Config {
-    images_map: HashMap<String, Vec<String>>,
     backup_location: PathBuf,
     conn: Connection,
+    stats: Stats,
+}
+
+#[derive(Default)]
+struct Stats {
+    total_directories_found: i32,
+    total_files_seen: i32,
+    total_file_read_error: i32,
+    total_image_files_seen: i32,
+    total_image_files_copied: i32,
+    total_copy_errors: i32,
+    total_duplicates_detected: i32,
+    total_database_errors: i32,
 }
 fn main() {
     //Default location to store file backups -- prompt user
@@ -37,23 +49,15 @@ fn main() {
 
         let db_path = backup_location.join("photo_manager.db");
         let conn = db::init(&db_path).expect("Failed to initialize database");
-        let images_map = db::load_known_hashes(&conn).unwrap_or_default();
-        info!(
-            "Loaded {} previously known hashes from database",
-            images_map.len()
-        );
-
+        let stats = Stats::default();
         let mut config = Config {
-            images_map,
             backup_location,
             conn,
+            stats,
         };
         analyze_folder(Path::new("test"), &mut config).unwrap();
 
         info!("Displaying results of search...");
-        for (k, v) in config.images_map.iter() {
-            println!("Hash: {} - Files: [{}]", k, v.join(", "))
-        }
     } else {
         let dir_path = &args[1];
         visit_directory(Path::new(dir_path), &print_file_name).unwrap();
