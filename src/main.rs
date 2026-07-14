@@ -17,14 +17,16 @@ struct Config {
 
 #[derive(Default)]
 struct Stats {
-    total_directories_found: i32,
-    total_files_seen: i32,
-    total_file_read_error: i32,
-    total_image_files_seen: i32,
-    total_image_files_copied: i32,
-    total_copy_errors: i32,
-    total_duplicates_detected: i32,
-    total_database_errors: i32,
+    total_directories_found: u64,
+    total_files_seen: u64,
+    total_file_read_error: u64,
+    total_image_files_seen: u64,
+    total_image_files_copied: u64,
+    total_copy_errors: u64,
+    total_duplicates_detected: u64,
+    total_database_errors: u64,
+    total_symlinks_skipped: u64,
+    total_symlinks_allowed: u64,
 }
 fn main() {
     //Default location to store file backups -- prompt user
