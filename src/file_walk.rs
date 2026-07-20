@@ -1,10 +1,13 @@
 use crate::Config;
+use hex;
 use image::ImageError;
+use image_hasher::{self, HasherConfig};
 use log::{error, info, warn};
 use sha2::{Digest, Sha256};
 use std::{
+    error::Error,
     fs::{self, DirEntry},
-    io::{self},
+    io::{self, ErrorKind::InvalidData},
     path::{Path, PathBuf},
 };
 
@@ -14,54 +17,184 @@ pub fn print_file_name(file: &DirEntry) {
     println!("{}", file.file_name().display());
 }
 
-// TODO consider adding a cryptographic hash for exact file detection
 // utilize SHA-256
-
-pub fn get_crypto_hash(file: &DirEntry) -> Result<String, ImageError> {
-    let path = file.path();
-    match image::open(&path) {
+// Hashes pixel data, not file data. This is to avoid false negatives when the same image is saved in different formats or with different metadata.
+pub fn get_crypto_hash(file: &Path) -> Result<String, ImageError> {
+    match image::open(file) {
         Ok(image) => {
             let data = image.as_bytes();
             let hash = Sha256::digest(data);
-            let result = hash.iter().map(|b| format!("{:02x}", b)).collect();
+            let result = hex::encode(hash);
             Ok(result)
         }
         Err(e) => {
             warn!(
                 "Error occurred while trying to read from {}",
-                path.display()
+                file.display()
             );
             Err(e)
         }
     }
 }
-pub fn get_phash(file: &DirEntry) -> Result<String, ImageError> {
-    let path = file.path();
-    match image::open(&path) {
+#[cfg(test)]
+mod crypto_tests {
+    use std::{fs, path::Path};
+
+    use crate::file_walk::get_crypto_hash;
+
+    use super::crypto_tests;
+    #[test]
+    fn validate_sha256_copy() {
+        let hash1 = get_crypto_hash(Path::new("samples/duplicates/sha256test.png"))
+            .expect("File should exist and hashing should succeed");
+        let hash2 = get_crypto_hash(Path::new("samples/duplicates/sha256test2.png"))
+            .expect("File should exist and hashing should succeed");
+        assert_eq!(
+            hash1, hash2,
+            "These hashes should match as these files are copies"
+        );
+    }
+
+    #[test]
+    fn validate_sha256_different() {
+        let hash1 = get_crypto_hash(Path::new("samples/different/sha256test.png"))
+            .expect("File should exist and hashing should succeed");
+        let hash2 = get_crypto_hash(Path::new("samples/different/sha256alt.png"))
+            .expect("File should exist and hashing should succeed");
+        assert_ne!(
+            hash1, hash2,
+            "These hashes should not match as these files are different"
+        );
+    }
+
+    #[test]
+    fn unsupported_file_type() {
+        let hash = get_crypto_hash(Path::new("samples/non_image/sample.txt"));
+        assert!(
+            hash.is_err(),
+            "get_crypto_hash doesn't support text files and should return an error"
+        );
+    }
+}
+pub fn get_phash(file: &Path) -> Result<String, ImageError> {
+    let hasher = HasherConfig::new()
+        .preproc_dct()
+        .hash_alg(image_hasher::HashAlg::Median)
+        .to_hasher();
+
+    match image::open(file) {
         Ok(image) => {
-            let phash = imagehash::perceptual_hash(&image);
-            Ok(phash.to_string())
+            let phash = hasher.hash_image(&image);
+            Ok(hex::encode(phash.as_bytes()))
         }
         Err(e) => {
             warn!(
                 "Error occurred while trying to read from {}",
-                path.display()
+                file.display()
             );
             Err(e)
         }
     }
 }
+#[cfg(test)]
+mod phash_tests {
+    use std::path::Path;
 
-fn calculate_hamming_distance(hash1: &imagehash::Hash, hash2: &imagehash::Hash) -> usize {
-    let bits1 = &hash1.bits;
-    let bits2 = &hash2.bits;
+    use crate::file_walk::{calculate_hamming_distance, get_phash};
 
-    let count = bits1
+    #[test]
+    fn validate_phash_copy() {
+        let hash1 = get_phash(Path::new("samples/duplicates/sha256test.png"))
+            .expect("File should exist and hashing should succeed");
+        let hash2 = get_phash(Path::new("samples/duplicates/sha256test2.png"))
+            .expect("File should exist and hashing should succeed");
+        assert_eq!(
+            hash1, hash2,
+            "These hashes should match as these files are copies"
+        );
+        assert_eq!(
+            calculate_hamming_distance(&hash1, &hash2).expect("Hashes should be comparable"),
+            0,
+            "Identical images should have a hamming distance of 0"
+        );
+    }
+
+    #[test]
+    fn validate_phash_near_duplicate() {
+        // These fixtures are the same flower image shifted by a few pixels: good
+        // Assert the tolerance instead of asserting the hashes differ.
+        let hash1 = get_phash(Path::new("samples/different/sha256test.png"))
+            .expect("File should exist and hashing should succeed");
+        let hash2 = get_phash(Path::new("samples/different/sha256alt.png"))
+            .expect("File should exist and hashing should succeed");
+        let distance =
+            calculate_hamming_distance(&hash1, &hash2).expect("Hashes should be comparable");
+        assert!(
+            distance <= 8,
+            "A minor positional shift should still be perceptually near-identical, got hamming distance {}",
+            distance
+        );
+    }
+
+    #[test]
+    fn different_files() {
+        let hash1 = get_phash(Path::new("samples/different/sha256test.png"))
+            .expect("File should exist and hash with no errors");
+        let hash2 = get_phash(Path::new("samples/different/unique.png"))
+            .expect("File should exist and hash with no errors");
+        let distance =
+            calculate_hamming_distance(&hash1, &hash2).expect("Hashes should be comparable");
+        assert!(
+            distance > 16,
+            "These files are different and should have a hamming distance greater than 16, got {}",
+            distance
+        );
+    }
+
+    #[test]
+    fn unsupported_file_type() {
+        let hash = get_phash(Path::new("samples/non_image/sample.txt"));
+        assert!(
+            hash.is_err(),
+            "get_phash doesn't support text files and should return an error"
+        );
+    }
+}
+
+fn calculate_hamming_distance(hash1: &str, hash2: &str) -> io::Result<(usize)> {
+    let byte1 = match hex::decode(hash1) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Error while decoding hash1. {}", e),
+            ));
+        }
+    };
+
+    let byte2 = match hex::decode(hash2) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Error while decoding hash2. {}", e),
+            ));
+        }
+    };
+
+    if byte1.len() != byte2.len() {
+        return Err(io::Error::new(
+            InvalidData,
+            "hashes are not the same length so hamming distance is invalid",
+        ));
+    }
+
+    let diff_count = byte1
         .iter()
-        .zip(bits2.iter())
-        .filter(|(a, b)| a != b)
-        .count();
-    return count;
+        .zip(byte2.iter())
+        .map(|(a, b)| (a ^ b).count_ones() as usize)
+        .sum();
+    Ok(diff_count)
 }
 
 // Walk file system and attempt to perform action on said file.
@@ -191,7 +324,7 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
             // Entry is a file
             config.stats.total_files_seen += 1;
             // Check for an image file and operate
-            if let Ok(hash) = get_crypto_hash(&entry) {
+            if let Ok(hash) = get_crypto_hash(&path) {
                 // Supported image file detected, update stats
                 config.stats.total_image_files_seen += 1;
                 match crate::db::hash_exists(&config.conn, &hash) {
