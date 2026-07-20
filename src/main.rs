@@ -1,7 +1,10 @@
 use std::env;
+use std::fs::{DirEntry, read_dir};
 use std::path::{Path, PathBuf};
 
-use crate::file_walk::{analyze_folder, print_file_name, validate_save_location, visit_directory};
+use crate::file_walk::{
+    analyze_folder, get_phash, print_file_name, validate_save_location, visit_directory,
+};
 use log::LevelFilter;
 use log::info;
 use rusqlite::Connection;
@@ -62,7 +65,18 @@ fn main() {
         info!("Displaying results of search...");
     } else {
         let dir_path = &args[1];
-        visit_directory(Path::new(dir_path), &print_file_name).unwrap();
+
+        let a = b'1';
+        let b = b'1';
+        println!("{} {} {}", a, b, (a ^ b).count_ones());
+        // let dir = read_dir("test/sample1/").expect("Should work");
+        // for file in dir {
+        //     if let Ok(file) = file {
+        //         if let Ok(hash) = get_phash(&file) {
+        //             println!("File: {:?}, Hash: {:?}", file.path(), hash.as_bytes());
+        //         };
+        //     }
+        // }
     }
 }
 
