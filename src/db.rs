@@ -1,38 +1,44 @@
 use log::info;
 use rusqlite::{Connection, Result};
 use std::path::Path;
-
+use crate::file_walk::{HexString, PHashHexString};
 pub fn init(db_path: &Path) -> Result<Connection> {
     let conn = Connection::open(db_path)?;
     conn.execute(
         "CREATE TABLE IF NOT EXISTS image_hashes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            hash TEXT NOT NULL,
+            crypto_hash TEXT NOT NULL,
+            p_hash TEXT NOT NULL,
             file_path TEXT NOT NULL UNIQUE,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )",
         (),
     )?;
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_image_hashes_hash ON image_hashes(hash)",
+        "CREATE INDEX IF NOT EXISTS idx_image_hashes_hash ON image_hashes(crypto_hash)",
         (),
     )?;
     Ok(conn)
 }
 
-pub fn record_file(conn: &Connection, hash: &str, file_path: &str) -> Result<()> {
+pub fn record_file(
+    conn: &Connection,
+    crypto_hash: &HexString,
+    p_hash: &PHashHexString,
+    file_path: &str,
+) -> Result<()> {
     info!("File to record: {}", file_path);
     conn.execute(
-        "INSERT OR IGNORE INTO image_hashes (hash, file_path) VALUES (?1, ?2)",
-        (hash, file_path),
+        "INSERT OR IGNORE INTO image_hashes (crypto_hash, p_hash, file_path) VALUES (?1, ?2, ?3)",
+        (crypto_hash.get_hex(), p_hash.get_hex(), file_path),
     )?;
     Ok(())
 }
 
-pub fn hash_exists(conn: &Connection, hash: &str) -> Result<bool> {
+pub fn crypto_hash_exists(conn: &Connection, crypto_hash: &HexString) -> Result<bool> {
     conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM image_hashes WHERE hash = ?1)",
-        [hash],
+        "SELECT EXISTS(SELECT 1 FROM image_hashes WHERE crypto_hash = ?1)",
+        [crypto_hash.get_hex()],
         |row| row.get(0),
     )
 }
