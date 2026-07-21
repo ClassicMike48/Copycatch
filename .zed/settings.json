@@ -7,50 +7,54 @@
 // custom settings, run `zed: open default settings` from the
 // command palette (cmd-shift-p / ctrl-shift-p)
 {
-  "edit_predictions": {
-    "mode": "subtle",
-    "provider": "copilot"
-  },
-  "format_on_save": "on",
-  "autosave": {
-    "after_delay": {
-      "milliseconds": 1000
-    }
-  },
-  "proxy": "",
-  "git_panel": {
-    "tree_view": false,
-    "dock": "right"
-  },
-  "agent": {
-    "dock": "right",
-    "favorite_models": [],
-    "model_parameters": []
-  },
-  "project_panel": {
-    "dock": "left"
-  },
-  "telemetry": {
-    "diagnostics": false,
-    "metrics": false,
-    "anthropic_retention": false
-  },
-  "agent_servers": {
-    "github-copilot-cli": {
-      "type": "registry"
+    "inlay_hints": {
+        "enabled": true
     },
-    "claude-acp": {
-      "default_config_options": {
-        "model": "default"
-      },
-      "type": "registry"
+
+    "edit_predictions": {
+        "mode": "subtle",
+        "provider": "copilot"
+    },
+    "format_on_save": "on",
+    "autosave": {
+        "after_delay": {
+            "milliseconds": 1000
+        }
+    },
+    "proxy": "",
+    "git_panel": {
+        "tree_view": false,
+        "dock": "right"
+    },
+    "agent": {
+        "dock": "right",
+        "favorite_models": [],
+        "model_parameters": []
+    },
+    "project_panel": {
+        "dock": "left"
+    },
+    "telemetry": {
+        "diagnostics": false,
+        "metrics": false,
+        "anthropic_retention": false
+    },
+    "agent_servers": {
+        "github-copilot-cli": {
+            "type": "registry"
+        },
+        "claude-acp": {
+            "default_config_options": {
+                "model": "default"
+            },
+            "type": "registry"
+        }
+    },
+    "ui_font_size": 16,
+    "buffer_font_size": 15,
+    "theme": {
+        "mode": "system",
+        "light": "Ayu Light",
+        "dark": "One Dark"
     }
-  },
-  "ui_font_size": 16,
-  "buffer_font_size": 15,
-  "theme": {
-    "mode": "system",
-    "light": "Ayu Light",
-    "dark": "One Dark",
-  },
 }

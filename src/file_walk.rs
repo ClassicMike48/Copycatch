@@ -5,7 +5,6 @@ use image_hasher::{self, HasherConfig};
 use log::{error, info, warn};
 use sha2::{Digest, Sha256};
 use std::{
-    error::Error,
     fs::{self, DirEntry},
     io::{self, ErrorKind::InvalidData},
     path::{Path, PathBuf},
@@ -17,15 +16,35 @@ pub fn print_file_name(file: &DirEntry) {
     println!("{}", file.file_name().display());
 }
 
+#[derive(Debug, PartialEq)]
+pub struct HexString(String);
+impl HexString {
+    pub fn get_hex(&self) -> &String {
+        &self.0
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct PHashHexString(String);
+impl PHashHexString {
+    pub fn get_hex(&self) -> &String {
+        &self.0
+    }
+
+    pub fn new(hex: String) -> PHashHexString {
+        PHashHexString(hex)
+    }
+}
 // utilize SHA-256
 // Hashes pixel data, not file data. This is to avoid false negatives when the same image is saved in different formats or with different metadata.
-pub fn get_crypto_hash(file: &Path) -> Result<String, ImageError> {
+// Supported file format is bounded by the image crate, which includes PNG, JPEG, GIF, BMP, ICO, TIFF, and WebP. To see the latest supported files see https://docs.rs/image/latest/image/codecs/index.html#supported-formats
+pub fn get_crypto_hash(file: &Path) -> Result<HexString, ImageError> {
     match image::open(file) {
         Ok(image) => {
             let data = image.as_bytes();
             let hash = Sha256::digest(data);
             let result = hex::encode(hash);
-            Ok(result)
+            Ok(HexString(result))
         }
         Err(e) => {
             warn!(
@@ -38,11 +57,9 @@ pub fn get_crypto_hash(file: &Path) -> Result<String, ImageError> {
 }
 #[cfg(test)]
 mod crypto_tests {
-    use std::{fs, path::Path};
+    use std::path::Path;
 
     use crate::file_walk::get_crypto_hash;
-
-    use super::crypto_tests;
     #[test]
     fn validate_sha256_copy() {
         let hash1 = get_crypto_hash(Path::new("samples/duplicates/sha256test.png"))
@@ -76,7 +93,10 @@ mod crypto_tests {
         );
     }
 }
-pub fn get_phash(file: &Path) -> Result<String, ImageError> {
+
+// Generates a perceptual hash from the pixel image data in order to relate two images that are visually similar but not identical.
+// Supported file format is bounded by the image crate, which includes PNG, JPEG, GIF, BMP, ICO, TIFF, and WebP. To see the latest supported files see https://docs.rs/image/latest/image/codecs/index.html#supported-formats
+pub fn get_phash(file: &Path) -> Result<PHashHexString, ImageError> {
     let hasher = HasherConfig::new()
         .preproc_dct()
         .hash_alg(image_hasher::HashAlg::Median)
@@ -85,7 +105,8 @@ pub fn get_phash(file: &Path) -> Result<String, ImageError> {
     match image::open(file) {
         Ok(image) => {
             let phash = hasher.hash_image(&image);
-            Ok(hex::encode(phash.as_bytes()))
+            let hex = hex::encode(phash.as_bytes());
+            Ok(PHashHexString(hex))
         }
         Err(e) => {
             warn!(
@@ -96,6 +117,7 @@ pub fn get_phash(file: &Path) -> Result<String, ImageError> {
         }
     }
 }
+
 #[cfg(test)]
 mod phash_tests {
     use std::path::Path;
@@ -161,8 +183,8 @@ mod phash_tests {
     }
 }
 
-fn calculate_hamming_distance(hash1: &str, hash2: &str) -> io::Result<(usize)> {
-    let byte1 = match hex::decode(hash1) {
+fn calculate_hamming_distance(hash1: &PHashHexString, hash2: &PHashHexString) -> io::Result<usize> {
+    let byte1 = match hex::decode(&hash1.get_hex()) {
         Ok(bytes) => bytes,
         Err(e) => {
             return Err(io::Error::new(
@@ -172,7 +194,7 @@ fn calculate_hamming_distance(hash1: &str, hash2: &str) -> io::Result<(usize)> {
         }
     };
 
-    let byte2 = match hex::decode(hash2) {
+    let byte2 = match hex::decode(&hash2.get_hex()) {
         Ok(bytes) => bytes,
         Err(e) => {
             return Err(io::Error::new(
@@ -197,6 +219,31 @@ fn calculate_hamming_distance(hash1: &str, hash2: &str) -> io::Result<(usize)> {
     Ok(diff_count)
 }
 
+#[cfg(test)]
+mod hamming_distance_tests {
+    use std::path::Path;
+
+    use crate::file_walk::{PHashHexString, get_phash};
+
+    use super::calculate_hamming_distance;
+    #[test]
+    fn matching_hash() {
+        let path = Path::new("samples/different/unique.png");
+        let hash1 = get_phash(path).expect("File should exist");
+        let hash2 = get_phash(path).expect("File should exist");
+        let distance =
+            calculate_hamming_distance(&hash1, &hash2).expect("Hashes should be comparable");
+        assert_eq!(distance, 0);
+    }
+    #[test]
+    fn exact_count() {
+        let hash1 = PHashHexString::new(hex::encode("00001000"));
+        let hash2 = PHashHexString::new(hex::encode("00000000"));
+        let distance =
+            calculate_hamming_distance(&hash1, &hash2).expect("Hashes should be comparable");
+        assert_eq!(distance, 1);
+    }
+}
 // Walk file system and attempt to perform action on said file.
 pub fn visit_directory(dir_path: &Path, action: &dyn Fn(&DirEntry)) -> io::Result<()> {
     if dir_path.is_dir() {
@@ -325,9 +372,10 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
             config.stats.total_files_seen += 1;
             // Check for an image file and operate
             if let Ok(hash) = get_crypto_hash(&path) {
+                
                 // Supported image file detected, update stats
                 config.stats.total_image_files_seen += 1;
-                match crate::db::hash_exists(&config.conn, &hash) {
+                match crate::db::crypto_hash_exists(&config.conn, &hash) {
                     Ok(true) => {
                         info!("Duplicate detected: {}", path.display());
                         config.stats.total_duplicates_detected += 1;
@@ -340,6 +388,21 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
                         continue;
                     }
                 }
+
+                // Compute the perceptual hash - Storing this hash helps with image comparison features
+                let phash = match get_phash(&path) {
+                    Ok(phash) => phash,
+                    Err(e) => {
+                        warn!(
+                            "Failed to compute perceptual hash for {}: {}",
+                            path.display(),
+                            e
+                        );
+                        //TODO: Is this stat really necessary?
+                        config.stats.total_phash_errors += 1;
+                        continue;
+                    }
+                };
 
                 // Not a duplicate photo that has been previously seen,
                 // Including across previous runs of the program (see db module)
@@ -359,7 +422,7 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
                     .to_string();
 
                 //TODO Consider the order of copying and commiting to database and whether this is the best order.
-                match crate::db::record_file(&config.conn, &hash, &backup_file_name_str) {
+                match crate::db::record_file(&config.conn, &hash, &phash, &backup_file_name_str) {
                     Ok(_) => config.stats.total_image_files_copied += 1,
                     Err(e) => {
                         warn!(

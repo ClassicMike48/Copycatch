@@ -1,9 +1,7 @@
 use std::env;
-use std::fs::{DirEntry, read_dir};
 use std::path::{Path, PathBuf};
-
 use crate::file_walk::{
-    analyze_folder, get_phash, print_file_name, validate_save_location, visit_directory,
+    analyze_folder, validate_save_location,
 };
 use log::LevelFilter;
 use log::info;
@@ -30,6 +28,7 @@ struct Stats {
     total_database_errors: u64,
     total_symlinks_skipped: u64,
     total_symlinks_allowed: u64,
+    total_phash_errors: u64,
 }
 fn main() {
     //Default location to store file backups -- prompt user
@@ -63,8 +62,9 @@ fn main() {
         analyze_folder(Path::new("test"), &mut config).unwrap();
 
         info!("Displaying results of search...");
+
     } else {
-        let dir_path = &args[1];
+        let _dir_path = &args[1];
 
         let a = b'1';
         let b = b'1';
