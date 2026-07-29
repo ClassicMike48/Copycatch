@@ -1,5 +1,4 @@
 use crate::Config;
-use hex;
 use image::ImageError;
 use image_hasher::{self, HasherConfig};
 use log::{error, info, warn};
@@ -10,8 +9,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-// create a file walker that will visit all files in a tree
-// recursive function
 pub fn print_file_name(file: &DirEntry) {
     println!("{}", file.file_name().display());
 }
@@ -29,10 +26,6 @@ pub struct PHashHexString(String);
 impl PHashHexString {
     pub fn get_hex(&self) -> &String {
         &self.0
-    }
-
-    pub fn new(hex: String) -> PHashHexString {
-        PHashHexString(hex)
     }
 }
 // utilize SHA-256
@@ -184,7 +177,7 @@ mod phash_tests {
 }
 
 fn calculate_hamming_distance(hash1: &PHashHexString, hash2: &PHashHexString) -> io::Result<usize> {
-    let byte1 = match hex::decode(&hash1.get_hex()) {
+    let byte1 = match hex::decode(hash1.get_hex()) {
         Ok(bytes) => bytes,
         Err(e) => {
             return Err(io::Error::new(
@@ -194,7 +187,7 @@ fn calculate_hamming_distance(hash1: &PHashHexString, hash2: &PHashHexString) ->
         }
     };
 
-    let byte2 = match hex::decode(&hash2.get_hex()) {
+    let byte2 = match hex::decode(hash2.get_hex()) {
         Ok(bytes) => bytes,
         Err(e) => {
             return Err(io::Error::new(
@@ -237,24 +230,23 @@ mod hamming_distance_tests {
     }
     #[test]
     fn exact_count() {
-        let hash1 = PHashHexString::new(hex::encode("00001000"));
-        let hash2 = PHashHexString::new(hex::encode("00000000"));
+        let hash1 = PHashHexString(hex::encode("00001000"));
+        let hash2 = PHashHexString(hex::encode("00000000"));
         let distance =
             calculate_hamming_distance(&hash1, &hash2).expect("Hashes should be comparable");
         assert_eq!(distance, 1);
     }
 }
 // Walk file system and attempt to perform action on said file.
+
 pub fn visit_directory(dir_path: &Path, action: &dyn Fn(&DirEntry)) -> io::Result<()> {
     if dir_path.is_dir() {
-        for entry in fs::read_dir(dir_path)? {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                if path.is_dir() {
-                    visit_directory(&path, action)?;
-                } else {
-                    action(&entry);
-                }
+        for entry in fs::read_dir(dir_path)?.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                visit_directory(&path, action)?;
+            } else {
+                action(&entry);
             }
         }
     }
@@ -372,7 +364,6 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
             config.stats.total_files_seen += 1;
             // Check for an image file and operate
             if let Ok(hash) = get_crypto_hash(&path) {
-                
                 // Supported image file detected, update stats
                 config.stats.total_image_files_seen += 1;
                 match crate::db::crypto_hash_exists(&config.conn, &hash) {
@@ -450,7 +441,7 @@ fn backup_file(source_path: &Path, destination_folder: &Path) -> io::Result<Path
         ));
     };
     let destination_path = unique_backup_path(destination_folder, original_file_name);
-    std::fs::copy(&source_path, &destination_path)?;
+    std::fs::copy(source_path, &destination_path)?;
     Ok(destination_path)
 }
 
@@ -485,21 +476,21 @@ fn unique_backup_path(backup_dir: &Path, original_file_name: &std::ffi::OsStr) -
 
 // Encapsulate runtime checking of backup folder existing and available for operations
 // Can be later expanded to check for previous program save states, and improved error messaging.
-pub fn validate_save_location(dir_path: &PathBuf) -> Result<(), std::io::Error> {
+pub fn validate_save_location(dir_path: &Path) -> Result<(), std::io::Error> {
     match dir_path.try_exists() {
         Ok(found) => {
             if found {
-                return Ok(());
+                Ok(())
             } else {
-                return Err(io::Error::new(
+                Err(io::Error::new(
                     io::ErrorKind::NotFound,
                     format!("Directory does not exist: {}", dir_path.display()),
-                ));
+                ))
             }
         }
         Err(e) => {
             error!("Issues verifying backup folder: {}", dir_path.display());
-            return Err(e);
+            Err(e)
         }
     }
 }
