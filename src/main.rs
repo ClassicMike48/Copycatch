@@ -16,7 +16,7 @@ struct Config {
     stats: Stats,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct Stats {
     total_directories_found: u64,
     total_files_seen: u64,
@@ -28,7 +28,6 @@ struct Stats {
     total_database_errors: u64,
     total_symlinks_skipped: u64,
     total_symlinks_allowed: u64,
-    total_phash_errors: u64,
 }
 fn main() {
     //Default location to store file backups -- prompt user
@@ -62,7 +61,7 @@ fn main() {
         analyze_folder(Path::new("test"), &mut config).unwrap();
 
         info!("Displaying results of search...");
-
+        println!("{:#?}", config.stats);
     } else {
         let _dir_path = &args[1];
 

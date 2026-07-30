@@ -42,3 +42,28 @@ pub fn crypto_hash_exists(conn: &Connection, crypto_hash: &HexString) -> Result<
         |row| row.get(0),
     )
 }
+
+#[derive(Debug, Clone)]
+pub struct ImageRecord {
+    pub id: i64,
+    pub crypto_hash: HexString,
+    pub p_hash: PHashHexString,
+    pub file_path: String,
+    pub created_at: String,
+}
+
+pub fn get_all_images(conn: &Connection) -> Result<Vec<ImageRecord>> {
+    let mut  stmt = conn.prepare(
+        "SELECT id, crypto_hash, p_hash, file_path, created_at FROM image_hashes",
+    )?;
+    let rows = stmt.query_map((), |row| {
+        Ok(ImageRecord {
+            id: row.get(0)?,
+            crypto_hash: HexString::new(row.get(1)?),
+            p_hash: PHashHexString::new(row.get(2)?),
+            file_path: row.get(3)?,
+            created_at: row.get(4)?,
+        })
+    })?;
+    rows.collect()
+}

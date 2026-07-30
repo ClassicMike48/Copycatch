@@ -13,17 +13,25 @@ pub fn print_file_name(file: &DirEntry) {
     println!("{}", file.file_name().display());
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct HexString(String);
 impl HexString {
+    pub fn new(hex: String) -> Self {
+        HexString(hex)
+    }
+
     pub fn get_hex(&self) -> &String {
         &self.0
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PHashHexString(String);
 impl PHashHexString {
+    pub fn new(hex: String) -> Self {
+        PHashHexString(hex)
+    }
+
     pub fn get_hex(&self) -> &String {
         &self.0
     }
@@ -389,8 +397,6 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
                             path.display(),
                             e
                         );
-                        //TODO: Is this stat really necessary?
-                        config.stats.total_phash_errors += 1;
                         continue;
                     }
                 };
