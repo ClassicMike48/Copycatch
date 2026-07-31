@@ -4,6 +4,7 @@ use std::path::Path;
 use crate::file_walk::{HexString, PHashHexString};
 pub fn init(db_path: &Path) -> Result<Connection> {
     let conn = Connection::open(db_path)?;
+    conn.execute("PRAGMA foreign_keys = ON", ())?;
     conn.execute(
         "CREATE TABLE IF NOT EXISTS image_hashes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -18,6 +19,23 @@ pub fn init(db_path: &Path) -> Result<Connection> {
         "CREATE INDEX IF NOT EXISTS idx_image_hashes_hash ON image_hashes(crypto_hash)",
         (),
     )?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS phash_comparisons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            image_id_1 INTEGER NOT NULL REFERENCES image_hashes(id),
+            image_id_2 INTEGER NOT NULL REFERENCES image_hashes(id),
+            hamming_distance INTEGER NOT NULL,
+            compared_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CHECK (image_id_1 < image_id_2),
+            UNIQUE (image_id_1, image_id_2)
+        )",
+        (),
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_phash_comparisons_image_id_2 ON phash_comparisons(image_id_2)",
+        (),
+    )?;
+
     Ok(conn)
 }
 
@@ -45,14 +63,14 @@ pub fn crypto_hash_exists(conn: &Connection, crypto_hash: &HexString) -> Result<
 
 #[derive(Debug, Clone)]
 pub struct ImageRecord {
-    pub id: i64,
-    pub crypto_hash: HexString,
-    pub p_hash: PHashHexString,
-    pub file_path: String,
-    pub created_at: String,
+    id: i64,
+    crypto_hash: HexString,
+    p_hash: PHashHexString,
+    file_path: String,
+    created_at: String,
 }
 
-pub fn get_all_images(conn: &Connection) -> Result<Vec<ImageRecord>> {
+pub fn get_images(conn: &Connection) -> Result<Vec<ImageRecord>> {
     let mut  stmt = conn.prepare(
         "SELECT id, crypto_hash, p_hash, file_path, created_at FROM image_hashes",
     )?;
