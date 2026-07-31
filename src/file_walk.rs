@@ -220,6 +220,63 @@ fn calculate_hamming_distance(hash1: &PHashHexString, hash2: &PHashHexString) ->
     Ok(diff_count)
 }
 
+// Compares image_id's p_hash against every not-yet-compared image in the database and
+// persists each resulting hamming distance. Failures are logged and tracked via config.stats
+// rather than propagated, matching the rest of analyze_folder's error handling.
+fn record_comparisons(config: &mut Config, image_id: i64, phash: &PHashHexString) {
+    let entries = match crate::db::get_phashes_to_compare(&config.conn, image_id) {
+        Ok(entries) => entries,
+        Err(e) => {
+            warn!(
+                "Failed to fetch comparison candidates for image {}: {}",
+                image_id, e
+            );
+            config.stats.total_database_errors += 1;
+            return;
+        }
+    };
+
+    for crate::db::PHashEntry(other_id, other_phash) in entries {
+        let distance = match calculate_hamming_distance(phash, &other_phash) {
+            Ok(distance) => distance,
+            Err(e) => {
+                warn!(
+                    "Failed to compare image {} against {}: {}",
+                    image_id, other_id, e
+                );
+                config.stats.total_comparison_errors += 1;
+                continue;
+            }
+        };
+
+        if let Err(e) = crate::db::record_comparison(&config.conn, image_id, other_id, distance) {
+            warn!(
+                "Failed to record comparison between {} and {}: {}",
+                image_id, other_id, e
+            );
+            config.stats.total_database_errors += 1;
+        }
+    }
+}
+
+// Runs comparisons for every image currently in the database. Used when config.compare_on_run
+// is false, so comparisons are deferred until after the whole folder walk has finished instead
+// of running inline as each file is recorded.
+pub fn compare_all_images(config: &mut Config) {
+    let images = match crate::db::get_images(&config.conn) {
+        Ok(images) => images,
+        Err(e) => {
+            warn!("Failed to fetch images for deferred comparison: {}", e);
+            config.stats.total_database_errors += 1;
+            return;
+        }
+    };
+
+    for image in images {
+        record_comparisons(config, image.id, &image.p_hash);
+    }
+}
+
 #[cfg(test)]
 mod hamming_distance_tests {
     use std::path::Path;
@@ -420,7 +477,26 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
 
                 //TODO Consider the order of copying and commiting to database and whether this is the best order.
                 match crate::db::record_file(&config.conn, &hash, &phash, &backup_file_name_str) {
-                    Ok(_) => config.stats.total_image_files_copied += 1,
+                    Ok(_) => {
+                        config.stats.total_image_files_copied += 1;
+                        if config.compare_on_run {
+                            match crate::db::get_image_by_crypto_hash(&config.conn, &hash) {
+                                Ok(Some(record)) => record_comparisons(config, record.id, &phash),
+                                Ok(None) => warn!(
+                                    "Recorded file {} but could not find it immediately after insert",
+                                    path.display()
+                                ),
+                                Err(e) => {
+                                    warn!(
+                                        "Failed to look up recorded file {}: {}",
+                                        path.display(),
+                                        e
+                                    );
+                                    config.stats.total_database_errors += 1;
+                                }
+                            }
+                        }
+                    }
                     Err(e) => {
                         warn!(
                             "Failed to persist hash record for {}: {}",

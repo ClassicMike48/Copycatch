@@ -1,7 +1,7 @@
 use std::env;
 use std::path::{Path, PathBuf};
 use crate::file_walk::{
-    analyze_folder, validate_save_location,
+    analyze_folder, compare_all_images, validate_save_location,
 };
 use log::LevelFilter;
 use log::info;
@@ -12,6 +12,7 @@ mod file_walk;
 
 struct Config {
     backup_location: PathBuf,
+    compare_on_run: bool,
     conn: Connection,
     stats: Stats,
 }
@@ -28,6 +29,7 @@ struct Stats {
     total_database_errors: u64,
     total_symlinks_skipped: u64,
     total_symlinks_allowed: u64,
+    total_comparison_errors: u64,
 }
 fn main() {
     //Default location to store file backups -- prompt user
@@ -45,7 +47,7 @@ fn main() {
         // No directory provided, use default
         info!("No path provided, using default directory: 'test'");
         let backup_location = Path::new("backup/").to_path_buf();
-        println!("{}", backup_location.is_dir());
+        info!("{}", backup_location.is_dir());
 
         //Validate the location for copying files
         validate_save_location(&backup_location).unwrap();
@@ -53,12 +55,19 @@ fn main() {
         let db_path = backup_location.join("photo_manager.db");
         let conn = db::init(&db_path).expect("Failed to initialize database");
         let stats = Stats::default();
+        let compare_on_run = false;
         let mut config = Config {
             backup_location,
             conn,
             stats,
+            compare_on_run,
         };
         analyze_folder(Path::new("test"), &mut config).unwrap();
+
+        if !config.compare_on_run {
+            info!("Starting image comparisons for similarities");
+            compare_all_images(&mut config);
+        }
 
         info!("Displaying results of search...");
         println!("{:#?}", config.stats);
