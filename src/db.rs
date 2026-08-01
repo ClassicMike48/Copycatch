@@ -19,6 +19,8 @@ pub fn init(db_path: &Path) -> Result<Connection> {
         )",
         (),
     )?;
+
+    // The total rows should equal N(N-1)/2 where N is the number of images in the image_hashes table
     conn.execute(
         "CREATE TABLE IF NOT EXISTS phash_comparisons (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -146,7 +148,7 @@ pub struct PHashEntry(pub i64, pub PHashHexString);
 ///
 /// Returns a vector of PHashEntry structs containing the id and p_hash of each candidate image
 /// Failure
-/// Will return Err if sql cannot be converted to a C-compatible string
+/// Err if sql cannot be converted to a C-compatible string
 /// or if the underlying SQLite call fails.
 pub fn get_phashes_to_compare(conn: &Connection, id: i64) -> Result<Vec<PHashEntry>> {
     let mut stmt = conn.prepare(
@@ -172,7 +174,7 @@ pub fn get_phashes_to_compare(conn: &Connection, id: i64) -> Result<Vec<PHashEnt
 /// inserted again.
 ///
 /// Failure
-/// Will return Err if sql cannot be converted to a C-compatible string
+/// Err if sql cannot be converted to a C-compatible string
 /// or if the underlying SQLite call fails.
 pub fn record_comparison(
     conn: &Connection,
@@ -192,3 +194,46 @@ pub fn record_comparison(
     Ok(())
 }
 
+/// A struct representing a similar image entry, containing the id, file path, and hamming distance from the database
+pub struct SimilarEntry(pub i64, pub String, pub i64);
+
+/// Retrieves all image comparisons for a given image id.
+///
+/// Returns
+/// - the id, filename, and hamming distance of the compared files, ordered by most similar
+/// - an empty vector if no comparisons are found
+///
+/// Failure
+///
+/// Err if sql cannot be converted to a C-compatible string
+/// or if the underlying SQLite call fails.
+pub fn get_image_comparisons(
+    conn: &Connection,
+    image_id: i64,
+    order_asc: bool,
+) -> Result<Vec<SimilarEntry>> {
+    let order = match order_asc {
+        true => "ASC",
+        false => "DESC",
+    };
+
+    let mut stmt = conn.prepare(&format!(
+        "SELECT ih.id AS id, ih.file_path AS name, p.hamming_distance as hamming_distance
+        FROM phash_comparisons AS p
+        INNER JOIN image_hashes AS ih
+           ON ih.id = CASE WHEN p.image_id_1 = ?1 THEN p.image_id_2 ELSE p.image_id_1 END
+        WHERE p.image_id_1 = ?1 OR p.image_id_2 = ?1
+        ORDER BY p.hamming_distance {};
+        ",
+        order
+    ))?;
+
+    let rows = stmt.query_map([image_id], |row| {
+        let id = row.get(0)?;
+        let name = row.get(1)?;
+        let distance = row.get(2)?;
+        Ok(SimilarEntry(id, name, distance))
+    })?;
+
+    rows.collect()
+}
