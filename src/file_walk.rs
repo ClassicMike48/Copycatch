@@ -9,9 +9,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub fn print_file_name(file: &DirEntry) {
-    println!("{}", file.file_name().display());
-}
+
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HexString(String);
@@ -302,21 +300,9 @@ mod hamming_distance_tests {
         assert_eq!(distance, 1);
     }
 }
-// Walk file system and attempt to perform action on said file.
 
-pub fn visit_directory(dir_path: &Path, action: &dyn Fn(&DirEntry)) -> io::Result<()> {
-    if dir_path.is_dir() {
-        for entry in fs::read_dir(dir_path)?.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                visit_directory(&path, action)?;
-            } else {
-                action(&entry);
-            }
-        }
-    }
-    Ok(())
-}
+
+
 
 pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
     // Recursive calls below only ever pass paths the loop has already confirmed are
