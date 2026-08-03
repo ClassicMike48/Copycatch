@@ -1,12 +1,10 @@
-use std::env;
-use std::path::{Path, PathBuf};
-use crate::file_walk::{
-    analyze_folder, compare_all_images, validate_save_location,
-};
+use crate::file_walk::{analyze_folder, compare_all_images, validate_save_location};
 use log::LevelFilter;
 use log::info;
 use rusqlite::Connection;
+use std::env;
 use std::io::Write;
+use std::path::{Path, PathBuf};
 mod db;
 mod file_walk;
 
@@ -19,17 +17,17 @@ struct Config {
 
 #[derive(Default, Debug)]
 struct Stats {
-    total_directories_found: u64,
-    total_files_seen: u64,
-    total_file_read_error: u64,
-    total_image_files_seen: u64,
-    total_image_files_copied: u64,
-    total_copy_errors: u64,
-    total_duplicates_detected: u64,
-    total_database_errors: u64,
-    total_symlinks_skipped: u64,
-    total_symlinks_allowed: u64,
-    total_comparison_errors: u64,
+    directories_found: u64,
+    files_seen: u64,
+    file_read_error: u64,
+    image_files_copied: u64,
+    copy_errors: u64,
+    duplicates_detected: u64,
+    image_files_seen: u64,
+    database_errors: u64,
+    symlinks_skipped: u64,
+    symlinks_allowed: u64,
+    comparison_errors: u64,
 }
 fn main() {
     //Default location to store file backups -- prompt user
@@ -71,23 +69,5 @@ fn main() {
 
         info!("Displaying results of search...");
         println!("{:#?}", config.stats);
-    } else {
-        let _dir_path = &args[1];
-
-        let a = b'1';
-        let b = b'1';
-        println!("{} {} {}", a, b, (a ^ b).count_ones());
-        // let dir = read_dir("test/sample1/").expect("Should work");
-        // for file in dir {
-        //     if let Ok(file) = file {
-        //         if let Ok(hash) = get_phash(&file) {
-        //             println!("File: {:?}, Hash: {:?}", file.path(), hash.as_bytes());
-        //         };
-        //     }
-        // }
     }
 }
-
-//Hash outputs in lowercase hex
-// 50da58893c4db448c810d689fc9f4ef9e091d37f5aab4e383a1142e287e4f8bf
-// 000036dadbdbdbda

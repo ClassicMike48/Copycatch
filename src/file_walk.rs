@@ -1,15 +1,13 @@
 use crate::Config;
-use image::ImageError;
+use image::DynamicImage;
 use image_hasher::{self, HasherConfig};
 use log::{error, info, warn};
 use sha2::{Digest, Sha256};
 use std::{
-    fs::{self, DirEntry},
+    fs::{self},
     io::{self, ErrorKind::InvalidData},
     path::{Path, PathBuf},
 };
-
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HexString(String);
@@ -37,23 +35,12 @@ impl PHashHexString {
 // utilize SHA-256
 // Hashes pixel data, not file data. This is to avoid false negatives when the same image is saved in different formats or with different metadata.
 // Supported file format is bounded by the image crate, which includes PNG, JPEG, GIF, BMP, ICO, TIFF, and WebP. To see the latest supported files see https://docs.rs/image/latest/image/codecs/index.html#supported-formats
-pub fn get_crypto_hash(file: &Path) -> Result<HexString, ImageError> {
-    match image::open(file) {
-        Ok(image) => {
-            let data = image.as_bytes();
-            let hash = Sha256::digest(data);
-            let result = hex::encode(hash);
-            Ok(HexString(result))
-        }
-        Err(e) => {
-            warn!(
-                "Error occurred while trying to read from {}",
-                file.display()
-            );
-            Err(e)
-        }
-    }
+pub fn get_crypto_hash(image: &DynamicImage) -> HexString {
+    let hash = Sha256::digest(image.as_bytes());
+    let result = hex::encode(hash);
+    HexString(result)
 }
+
 #[cfg(test)]
 mod crypto_tests {
     use std::path::Path;
@@ -61,10 +48,12 @@ mod crypto_tests {
     use crate::file_walk::get_crypto_hash;
     #[test]
     fn validate_sha256_copy() {
-        let hash1 = get_crypto_hash(Path::new("samples/duplicates/sha256test.png"))
-            .expect("File should exist and hashing should succeed");
-        let hash2 = get_crypto_hash(Path::new("samples/duplicates/sha256test2.png"))
-            .expect("File should exist and hashing should succeed");
+        let image1 = image::open(Path::new("samples/duplicates/sha256test.png"))
+            .expect("Image1 should open");
+        let image2 = image::open(Path::new("samples/duplicates/sha256test2.png"))
+            .expect("Image2 should open");
+        let hash1 = get_crypto_hash(&image1);
+        let hash2 = get_crypto_hash(&image2);
         assert_eq!(
             hash1, hash2,
             "These hashes should match as these files are copies"
@@ -73,48 +62,30 @@ mod crypto_tests {
 
     #[test]
     fn validate_sha256_different() {
-        let hash1 = get_crypto_hash(Path::new("samples/different/sha256test.png"))
-            .expect("File should exist and hashing should succeed");
-        let hash2 = get_crypto_hash(Path::new("samples/different/sha256alt.png"))
-            .expect("File should exist and hashing should succeed");
+        let image1 = image::open(Path::new("samples/duplicates/sha256test.png"))
+            .expect("Image1 should open");
+        let image2 =
+            image::open(Path::new("samples/different/sha256alt.png")).expect("Image2 should open");
+
+        let hash1 = get_crypto_hash(&image1);
+        let hash2 = get_crypto_hash(&image2);
         assert_ne!(
             hash1, hash2,
             "These hashes should not match as these files are different"
-        );
-    }
-
-    #[test]
-    fn unsupported_file_type() {
-        let hash = get_crypto_hash(Path::new("samples/non_image/sample.txt"));
-        assert!(
-            hash.is_err(),
-            "get_crypto_hash doesn't support text files and should return an error"
         );
     }
 }
 
 // Generates a perceptual hash from the pixel image data in order to relate two images that are visually similar but not identical.
 // Supported file format is bounded by the image crate, which includes PNG, JPEG, GIF, BMP, ICO, TIFF, and WebP. To see the latest supported files see https://docs.rs/image/latest/image/codecs/index.html#supported-formats
-pub fn get_phash(file: &Path) -> Result<PHashHexString, ImageError> {
+pub fn get_phash(image: &DynamicImage) -> PHashHexString {
     let hasher = HasherConfig::new()
         .preproc_dct()
         .hash_alg(image_hasher::HashAlg::Median)
         .to_hasher();
-
-    match image::open(file) {
-        Ok(image) => {
-            let phash = hasher.hash_image(&image);
-            let hex = hex::encode(phash.as_bytes());
-            Ok(PHashHexString(hex))
-        }
-        Err(e) => {
-            warn!(
-                "Error occurred while trying to read from {}",
-                file.display()
-            );
-            Err(e)
-        }
-    }
+    let phash = hasher.hash_image(image);
+    let hex = hex::encode(phash.as_bytes());
+    PHashHexString(hex)
 }
 
 #[cfg(test)]
@@ -125,10 +96,13 @@ mod phash_tests {
 
     #[test]
     fn validate_phash_copy() {
-        let hash1 = get_phash(Path::new("samples/duplicates/sha256test.png"))
-            .expect("File should exist and hashing should succeed");
-        let hash2 = get_phash(Path::new("samples/duplicates/sha256test2.png"))
-            .expect("File should exist and hashing should succeed");
+        let image1 = image::open(Path::new("samples/duplicates/sha256test.png"))
+            .expect("Image1 should open");
+        let image2 = image::open(Path::new("samples/duplicates/sha256test2.png"))
+            .expect("Image2 should open");
+
+        let hash1 = get_phash(&image1);
+        let hash2 = get_phash(&image2);
         assert_eq!(
             hash1, hash2,
             "These hashes should match as these files are copies"
@@ -144,10 +118,12 @@ mod phash_tests {
     fn validate_phash_near_duplicate() {
         // These fixtures are the same flower image shifted by a few pixels: good
         // Assert the tolerance instead of asserting the hashes differ.
-        let hash1 = get_phash(Path::new("samples/different/sha256test.png"))
-            .expect("File should exist and hashing should succeed");
-        let hash2 = get_phash(Path::new("samples/different/sha256alt.png"))
-            .expect("File should exist and hashing should succeed");
+        let image1 =
+            image::open(Path::new("samples/different/sha256test.png")).expect("Image1 should open");
+        let image2 =
+            image::open(Path::new("samples/different/sha256alt.png")).expect("Image2 should open");
+        let hash1 = get_phash(&image1);
+        let hash2 = get_phash(&image2);
         let distance =
             calculate_hamming_distance(&hash1, &hash2).expect("Hashes should be comparable");
         assert!(
@@ -159,25 +135,18 @@ mod phash_tests {
 
     #[test]
     fn different_files() {
-        let hash1 = get_phash(Path::new("samples/different/sha256test.png"))
-            .expect("File should exist and hash with no errors");
-        let hash2 = get_phash(Path::new("samples/different/unique.png"))
-            .expect("File should exist and hash with no errors");
+        let image1 =
+            image::open(Path::new("samples/different/sha256test.png")).expect("Image1 should open");
+        let image2 =
+            image::open(Path::new("samples/different/unique.png")).expect("Image2 should open");
+        let hash1 = get_phash(&image1);
+        let hash2 = get_phash(&image2);
         let distance =
             calculate_hamming_distance(&hash1, &hash2).expect("Hashes should be comparable");
         assert!(
             distance > 16,
             "These files are different and should have a hamming distance greater than 16, got {}",
             distance
-        );
-    }
-
-    #[test]
-    fn unsupported_file_type() {
-        let hash = get_phash(Path::new("samples/non_image/sample.txt"));
-        assert!(
-            hash.is_err(),
-            "get_phash doesn't support text files and should return an error"
         );
     }
 }
@@ -229,7 +198,7 @@ fn record_comparisons(config: &mut Config, image_id: i64, phash: &PHashHexString
                 "Failed to fetch comparison candidates for image {}: {}",
                 image_id, e
             );
-            config.stats.total_database_errors += 1;
+            config.stats.database_errors += 1;
             return;
         }
     };
@@ -242,7 +211,7 @@ fn record_comparisons(config: &mut Config, image_id: i64, phash: &PHashHexString
                     "Failed to compare image {} against {}: {}",
                     image_id, other_id, e
                 );
-                config.stats.total_comparison_errors += 1;
+                config.stats.comparison_errors += 1;
                 continue;
             }
         };
@@ -252,7 +221,7 @@ fn record_comparisons(config: &mut Config, image_id: i64, phash: &PHashHexString
                 "Failed to record comparison between {} and {}: {}",
                 image_id, other_id, e
             );
-            config.stats.total_database_errors += 1;
+            config.stats.database_errors += 1;
         }
     }
 }
@@ -265,7 +234,7 @@ pub fn compare_all_images(config: &mut Config) {
         Ok(images) => images,
         Err(e) => {
             warn!("Failed to fetch images for deferred comparison: {}", e);
-            config.stats.total_database_errors += 1;
+            config.stats.database_errors += 1;
             return;
         }
     };
@@ -285,8 +254,9 @@ mod hamming_distance_tests {
     #[test]
     fn matching_hash() {
         let path = Path::new("samples/different/unique.png");
-        let hash1 = get_phash(path).expect("File should exist");
-        let hash2 = get_phash(path).expect("File should exist");
+        let image1 = image::open(path).expect("Image1 should open");
+        let hash1 = get_phash(&image1);
+        let hash2 = get_phash(&image1);
         let distance =
             calculate_hamming_distance(&hash1, &hash2).expect("Hashes should be comparable");
         assert_eq!(distance, 0);
@@ -300,9 +270,6 @@ mod hamming_distance_tests {
         assert_eq!(distance, 1);
     }
 }
-
-
-
 
 pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
     // Recursive calls below only ever pass paths the loop has already confirmed are
@@ -343,7 +310,7 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
             Err(e) => {
                 // Document error and continue to next entry
                 warn!("{}", e);
-                config.stats.total_file_read_error += 1;
+                config.stats.file_read_error += 1;
                 continue;
             }
         };
@@ -367,7 +334,7 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
                     path.display(),
                     e
                 );
-                config.stats.total_file_read_error += 1;
+                config.stats.file_read_error += 1;
                 continue;
             }
         };
@@ -377,7 +344,7 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
             match fs::metadata(&path) {
                 Ok(target_metadata) if target_metadata.is_dir() => {
                     //symlink resolves to a directory, do not follow and update stats
-                    config.stats.total_symlinks_skipped += 1;
+                    config.stats.symlinks_skipped += 1;
                     warn!(
                         "Skipping symlink {} that points to a directory",
                         path.display()
@@ -390,10 +357,10 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
                         "Symlink {} points to a file. Allowing backup... ",
                         path.display()
                     );
-                    config.stats.total_symlinks_allowed += 1;
+                    config.stats.symlinks_allowed += 1;
                 }
                 Err(e) => {
-                    config.stats.total_symlinks_skipped += 1;
+                    config.stats.symlinks_skipped += 1;
                     warn!(
                         "Skipping symlink {} as target metadata could not be read: {}",
                         path.display(),
@@ -405,97 +372,130 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
         }
         if file_type.is_dir() {
             // Recur through the rest of the file tree
-            config.stats.total_directories_found += 1;
+            config.stats.directories_found += 1;
             // If an error occurs while analyzing the folder, log it and continue to the next entry.
             if let Err(e) = analyze_folder(&path, config) {
                 error!("{}", e);
             };
         } else {
             // Entry is a file
-            config.stats.total_files_seen += 1;
+            config.stats.files_seen += 1;
             // Check for an image file and operate
-            if let Ok(hash) = get_crypto_hash(&path) {
-                // Supported image file detected, update stats
-                config.stats.total_image_files_seen += 1;
-                match crate::db::crypto_hash_exists(&config.conn, &hash) {
-                    Ok(true) => {
-                        info!("Duplicate detected: {}", path.display());
-                        config.stats.total_duplicates_detected += 1;
-                        continue;
-                    }
-                    Ok(false) => {}
-                    Err(e) => {
-                        warn!("Failed to get hash record for {}: {}", path.display(), e);
-                        config.stats.total_database_errors += 1;
-                        continue;
-                    }
+            let image = match image::open(&path) {
+                Ok(image) => image,
+                Err(e) => {
+                    //skip non-image files
+                    warn!("Failed to open image file {}: {}", path.display(), e);
+                    continue;
                 }
+            };
+            config.stats.image_files_seen += 1;
 
-                // Compute the perceptual hash - Storing this hash helps with image comparison features
-                let phash = match get_phash(&path) {
-                    Ok(phash) => phash,
-                    Err(e) => {
-                        warn!(
-                            "Failed to compute perceptual hash for {}: {}",
-                            path.display(),
-                            e
-                        );
-                        continue;
-                    }
-                };
+            let crypto_hash = get_crypto_hash(&image);
 
-                // Not a duplicate photo that has been previously seen,
-                // Including across previous runs of the program (see db module)
-                let backup_file_name = match backup_file(&path, &config.backup_location) {
-                    Ok(path) => path,
-                    Err(e) => {
-                        warn!("{} could not be copied: {}", path.display(), e);
-                        config.stats.total_copy_errors += 1;
-                        continue;
-                    }
-                };
-                // Persist so this hash is known on subsequent runs
-                let backup_file_name_str = backup_file_name
-                    .file_name()
-                    .unwrap() //.file_name() should not return None here will how backup_file_name is generated. If this panics, the process of naming the file should be inspected.
-                    .to_string_lossy()
-                    .to_string();
+            // Supported image file detected, update stats
+            match crate::db::crypto_hash_exists(&config.conn, &crypto_hash) {
+                Ok(true) => {
+                    info!("Duplicate detected: {}", path.display());
+                    config.stats.duplicates_detected += 1;
+                    continue;
+                }
+                Ok(false) => {}
+                Err(e) => {
+                    warn!("Failed to get hash record for {}: {}", path.display(), e);
+                    config.stats.database_errors += 1;
+                    continue;
+                }
+            }
 
-                //TODO Consider the order of copying and commiting to database and whether this is the best order.
-                match crate::db::record_file(&config.conn, &hash, &phash, &backup_file_name_str) {
-                    Ok(_) => {
-                        config.stats.total_image_files_copied += 1;
-                        if config.compare_on_run {
-                            match crate::db::get_image_by_crypto_hash(&config.conn, &hash) {
-                                Ok(Some(record)) => record_comparisons(config, record.id, &phash),
-                                Ok(None) => warn!(
-                                    "Recorded file {} but could not find it immediately after insert",
-                                    path.display()
-                                ),
-                                Err(e) => {
-                                    warn!(
-                                        "Failed to look up recorded file {}: {}",
-                                        path.display(),
-                                        e
-                                    );
-                                    config.stats.total_database_errors += 1;
-                                }
+            // Compute the perceptual hash - Storing this hash helps with image comparison features
+            let phash = get_phash(&image);
+
+            // Not a duplicate photo that has been previously seen,
+            // Including across previous runs of the program (see db module)
+            let backup_file_name = match backup_file(&path, &config.backup_location) {
+                Ok(path) => path,
+                Err(e) => {
+                    warn!("{} could not be copied: {}", path.display(), e);
+                    config.stats.copy_errors += 1;
+                    continue;
+                }
+            };
+            // Persist so this hash is known on subsequent runs
+            let backup_file_name_str = backup_file_name
+                .file_name()
+                .unwrap() //.file_name() should not return None here will how backup_file_name is generated. If this panics, the process of naming the file should be inspected.
+                .to_string_lossy()
+                .to_string();
+
+            //TODO Consider the order of copying and commiting to database and whether this is the best order.
+            match crate::db::record_file(&config.conn, &crypto_hash, &phash, &backup_file_name_str)
+            {
+                Ok(_) => {
+                    config.stats.image_files_copied += 1;
+                    if config.compare_on_run {
+                        match crate::db::get_image_by_crypto_hash(&config.conn, &crypto_hash) {
+                            Ok(Some(record)) => record_comparisons(config, record.id, &phash),
+                            Ok(None) => warn!(
+                                "Recorded file {} but could not find it immediately after insert",
+                                path.display()
+                            ),
+                            Err(e) => {
+                                warn!("Failed to look up recorded file {}: {}", path.display(), e);
+                                config.stats.database_errors += 1;
                             }
                         }
                     }
-                    Err(e) => {
-                        warn!(
-                            "Failed to persist hash record for {}: {}",
-                            path.display(),
-                            e
-                        );
-                        config.stats.total_database_errors += 1;
-                    }
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to persist hash record for {}: {}",
+                        path.display(),
+                        e
+                    );
+                    config.stats.database_errors += 1;
                 }
             }
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod analyze_folder_tests {
+    use std::path::{Path, PathBuf};
+
+    use crate::file_walk::analyze_folder;
+    use crate::{Config, Stats};
+
+    #[test]
+    fn skips_non_image_file_without_error() {
+        let conn =
+            crate::db::init(Path::new(":memory:")).expect("in-memory db should initialize");
+        let mut config = Config {
+            // backup_file() is never invoked on this path, so this location is never touched.
+            backup_location: PathBuf::new(),
+            compare_on_run: false,
+            conn,
+            stats: Stats::default(),
+        };
+
+        analyze_folder(Path::new("samples/non_image"), &mut config)
+            .expect("walking a directory of only non-image files should not error");
+
+        assert_eq!(config.stats.files_seen, 1, "the .txt file should be counted as seen");
+        assert_eq!(
+            config.stats.image_files_seen, 0,
+            "a non-image file must not be counted as an image"
+        );
+        assert_eq!(config.stats.database_errors, 0);
+
+        let images = crate::db::get_images(&config.conn).expect("query should succeed");
+        assert!(
+            images.is_empty(),
+            "no image record should have been created for a non-image file"
+        );
+    }
 }
 
 fn backup_file(source_path: &Path, destination_folder: &Path) -> io::Result<PathBuf> {

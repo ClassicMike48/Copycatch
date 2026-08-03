@@ -217,6 +217,7 @@ pub fn get_image_comparisons(
         false => "DESC",
     };
 
+    //Safe format since it is completely static and not user input
     let mut stmt = conn.prepare(&format!(
         "SELECT ih.id AS id, ih.file_path AS name, p.hamming_distance as hamming_distance
         FROM phash_comparisons AS p
