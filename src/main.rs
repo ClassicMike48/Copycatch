@@ -1,10 +1,8 @@
 use crate::file_walk::{analyze_folder, compare_all_images, validate_save_location};
-use clap::Parser;
+use clap::{Args, Parser, Subcommand};
 use log::LevelFilter;
 use log::info;
 use rusqlite::Connection;
-use std::backtrace;
-use std::env;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 mod db;
@@ -35,7 +33,31 @@ struct Config {
 /// A command line tool to analyze and manage image files in a centralized location. It scans directories for image files, copies them to a backup location, and compares them for similarities.
 #[derive(Parser, Debug)]
 #[command(version="0.1", about, long_about = None)]
-struct Args {
+#[command(propagate_version = true)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Run p-hash comparisons of all items in the database
+    Compare(CompareArgs),
+    /// Backup files and build metadata
+    Backup(BackupArgs),
+}
+
+#[derive(Args, Debug)]
+struct CompareArgs {
+    /// Location of folder backup containing the image database file to update
+    #[arg(short, long, default_value = "backup/")]
+    destination_folder: String,
+}
+
+impl CompareArgs
+
+#[derive(Args, Debug)]
+struct BackupArgs {
     /// Location to create image database and store image backups. If not provided, defaults to 'backup/'.
     #[arg(short, long, default_value = "backup/")]
     destination_folder: String,
@@ -48,9 +70,50 @@ struct Args {
     #[arg(short, long)]
     source_folder: String,
 }
+
+impl BackupArgs {
+    fn run(&self) -> (){
+        
+        let destination_path = match self.destination_folder.as_str() {
+            "backup/" => {
+                info!("No path provided, using default directory: 'backup/'");
+                "backup/"
+            }
+            location => {
+                info!("Backing up files to {}", location);
+                location
+            }
+        };
+        let backup_location = Path::new(&destination_path).to_path_buf();
+        validate_save_location(Path::new(&backup_location)).expect("Failed to validate save location");
+    
+        let db_path = backup_location.join("photo_manager.db");
+        let conn = db::init(&db_path).expect("Failed to initialize database");
+        let stats = Stats::default();
+        let compare_on_run = self.compare_on_run;
+    
+        let mut config = Config {
+            backup_location,
+            conn,
+            stats,
+            compare_on_run,
+        };
+    
+        analyze_folder(Path::new("test"), &mut config).unwrap();
+    
+        if !config.compare_on_run {
+            info!("Starting image comparisons for similarities");
+            compare_all_images(&mut config);
+        }
+    
+        info!("Displaying results of search...");
+        println!("{:#?}", config.stats);
+    }
+}
 fn main() {
-    //Default location to store file backups -- prompt user
-    let args = Args::parse();
+    // //Default location to store file backups -- prompt user
+    let args = Cli::parse();
+
     //Setup program logger
     env_logger::builder()
         .format(|buff, record| writeln!(buff, "{}: {}", record.level(), record.args()))
@@ -58,41 +121,14 @@ fn main() {
         .write_style(env_logger::WriteStyle::Auto) //For security, logging user input should be sanitized or use WriteStyle::never
         .init();
 
-    //let args: Vec<String> = env::args().collect();
     println!("{:#?}", args);
 
-    let destination_path = match args.destination_folder.as_str() {
-        "backup/" => {
-            info!("No path provided, using default directory: 'backup/'");
-            "backup/"
+
+    match &args.command {
+        Commands::Compare(args) => {
+            compare_all_images(&mut config);
+            return;
         }
-        location => {
-            info!("Backing up files to {}", location);
-            location
-        }
-    };
-    let backup_location = Path::new(&destination_path).to_path_buf();
-    validate_save_location(Path::new(&backup_location)).expect("Failed to validate save location");
-
-    let db_path = backup_location.join("photo_manager.db");
-    let conn = db::init(&db_path).expect("Failed to initialize database");
-    let stats = Stats::default();
-    let compare_on_run = args.compare_on_run;
-
-    let mut config = Config {
-        backup_location,
-        conn,
-        stats,
-        compare_on_run,
-    };
-
-    analyze_folder(Path::new("test"), &mut config).unwrap();
-
-    if !config.compare_on_run {
-        info!("Starting image comparisons for similarities");
-        compare_all_images(&mut config);
+        _ => {}
     }
-
-    info!("Displaying results of search...");
-    println!("{:#?}", config.stats);
 }
