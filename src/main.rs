@@ -20,6 +20,7 @@ struct Stats {
     database_errors: u64,
     symlinks_skipped: u64,
     symlinks_allowed: u64,
+    comparisons_performed: u64, // phash comparisons
     comparison_errors: u64,
 }
 
@@ -54,7 +55,29 @@ struct CompareArgs {
     destination_folder: String,
 }
 
-impl CompareArgs
+impl CompareArgs {
+    fn run(&self) -> () {
+        // verify that the provided destination will work or utilize sensible defaults.
+        let backup_location = handle_save_location(&self.destination_folder);
+
+        // Initialize Config
+        let db_path = backup_location.join("photo_manager.db");
+        let conn = db::init(&db_path).expect("Failed to initialize database");
+        let stats = Stats::default();
+        let compare_on_run = false;
+        let mut config = Config {
+            backup_location,
+            conn,
+            stats,
+            compare_on_run,
+        }; 
+        
+        compare_all_images(&mut config);
+        // print results
+        info!("Displaying results of comparisons...");
+        println!("{:#?}", config.stats);
+    }
+}
 
 #[derive(Args, Debug)]
 struct BackupArgs {
@@ -72,44 +95,51 @@ struct BackupArgs {
 }
 
 impl BackupArgs {
-    fn run(&self) -> (){
-        
-        let destination_path = match self.destination_folder.as_str() {
-            "backup/" => {
-                info!("No path provided, using default directory: 'backup/'");
-                "backup/"
-            }
-            location => {
-                info!("Backing up files to {}", location);
-                location
-            }
-        };
-        let backup_location = Path::new(&destination_path).to_path_buf();
-        validate_save_location(Path::new(&backup_location)).expect("Failed to validate save location");
-    
+    fn run(&self) -> () {
+        // verify that the provided destination will work or utilize sensible defaults.
+        let backup_location = handle_save_location(&self.destination_folder);
+
         let db_path = backup_location.join("photo_manager.db");
         let conn = db::init(&db_path).expect("Failed to initialize database");
         let stats = Stats::default();
         let compare_on_run = self.compare_on_run;
-    
+
         let mut config = Config {
             backup_location,
             conn,
             stats,
             compare_on_run,
         };
-    
+
         analyze_folder(Path::new("test"), &mut config).unwrap();
-    
+
         if !config.compare_on_run {
             info!("Starting image comparisons for similarities");
             compare_all_images(&mut config);
         }
-    
+
         info!("Displaying results of search...");
         println!("{:#?}", config.stats);
     }
 }
+
+/// Helper function that verifies that the provided save location is valid and returns a PathBuf. Will panic if the save location is invalid.
+fn handle_save_location(path: &str) -> PathBuf {
+    let destination_path = match path {
+        "backup/" => {
+            info!("No path provided, using default directory: 'backup/'");
+            "backup/"
+        }
+        location => {
+            info!("Backing up files to {}", location);
+            location
+        }
+    };
+    let backup_location = Path::new(&destination_path).to_path_buf();
+    validate_save_location(Path::new(&backup_location)).expect("Failed to validate save location");
+    backup_location
+}
+
 fn main() {
     // //Default location to store file backups -- prompt user
     let args = Cli::parse();
@@ -122,11 +152,13 @@ fn main() {
         .init();
 
     println!("{:#?}", args);
-
-
     match &args.command {
-        Commands::Compare(args) => {
-            compare_all_images(&mut config);
+        Commands::Compare(compare_args) => {
+            compare_args.run();
+            return;
+        }
+        Commands::Backup(backup_args)=>{
+            backup_args.run();
             return;
         }
         _ => {}

@@ -216,12 +216,21 @@ fn record_comparisons(config: &mut Config, image_id: i64, phash: &PHashHexString
             }
         };
 
-        if let Err(e) = crate::db::record_comparison(&config.conn, image_id, other_id, distance) {
-            warn!(
-                "Failed to record comparison between {} and {}: {}",
-                image_id, other_id, e
-            );
-            config.stats.database_errors += 1;
+        match crate::db::record_comparison(&config.conn, image_id, other_id, distance) {
+            Ok(_) => {
+                info!(
+                    "Recorded comparison between {} and {} with distance {}",
+                    image_id, other_id, distance
+                );
+                config.stats.comparisons_performed += 1;
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to record comparison between {} and {}: {}",
+                    image_id, other_id, e
+                ); 
+                config.stats.database_errors += 1;
+            }
         }
     }
 }
