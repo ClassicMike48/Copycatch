@@ -1,10 +1,12 @@
 use crate::file_walk::{analyze_folder, compare_all_images, validate_save_location};
 use clap::{Args, Parser, Subcommand};
 use log::LevelFilter;
-use log::info;
+use log::{error, info, warn};
 use rusqlite::Connection;
+use std::io::ErrorKind::NotFound;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::{fs, io};
 mod db;
 mod file_walk;
 
@@ -56,9 +58,10 @@ struct CompareArgs {
 }
 
 impl CompareArgs {
+    /// Runs the compare command with the provided arguments.
     fn run(&self) -> () {
         // verify that the provided destination will work or utilize sensible defaults.
-        let backup_location = handle_save_location(&self.destination_folder);
+        let backup_location = handle_save_location(&self.destination_folder).unwrap();
 
         // Initialize Config
         let db_path = backup_location.join("photo_manager.db");
@@ -70,8 +73,8 @@ impl CompareArgs {
             conn,
             stats,
             compare_on_run,
-        }; 
-        
+        };
+
         compare_all_images(&mut config);
         // print results
         info!("Displaying results of comparisons...");
@@ -95,9 +98,10 @@ struct BackupArgs {
 }
 
 impl BackupArgs {
+    /// Runs the backup command with the provided arguments.
     fn run(&self) -> () {
         // verify that the provided destination will work or utilize sensible defaults.
-        let backup_location = handle_save_location(&self.destination_folder);
+        let backup_location = handle_save_location(&self.destination_folder).unwrap();
 
         let db_path = backup_location.join("photo_manager.db");
         let conn = db::init(&db_path).expect("Failed to initialize database");
@@ -124,20 +128,35 @@ impl BackupArgs {
 }
 
 /// Helper function that verifies that the provided save location is valid and returns a PathBuf. Will panic if the save location is invalid.
-fn handle_save_location(path: &str) -> PathBuf {
+fn handle_save_location(path: &str) -> Result<PathBuf, std::io::Error> {
     let destination_path = match path {
         "backup/" => {
             info!("No path provided, using default directory: 'backup/'");
             "backup/"
         }
         location => {
-            info!("Backing up files to {}", location);
+            info!("Custom path provided: {}", location);
             location
         }
     };
     let backup_location = Path::new(&destination_path).to_path_buf();
-    validate_save_location(Path::new(&backup_location)).expect("Failed to validate save location");
-    backup_location
+    let result = match validate_save_location(Path::new(&backup_location)) {
+        Ok(_) => Ok(backup_location),
+        Err(e) => {
+            if e.kind() == NotFound && destination_path == "backup/" {
+                info!(
+                    "Default backup location does not exist, creating directory: {}",
+                    backup_location.display()
+                );
+
+                Err(e)
+            } else {
+                error!("Error validating save location: {}", e);
+                Err(e)
+            }
+        }
+    };
+    result
 }
 
 fn main() {
@@ -157,7 +176,7 @@ fn main() {
             compare_args.run();
             return;
         }
-        Commands::Backup(backup_args)=>{
+        Commands::Backup(backup_args) => {
             backup_args.run();
             return;
         }
