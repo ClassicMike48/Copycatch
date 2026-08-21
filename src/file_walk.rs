@@ -1,4 +1,4 @@
-use crate::Config;
+use crate::config::Config;
 use image::DynamicImage;
 use image_hasher::{self, HasherConfig};
 use log::{error, info, warn};
@@ -475,7 +475,7 @@ mod analyze_folder_tests {
     use std::path::{Path, PathBuf};
 
     use crate::file_walk::analyze_folder;
-    use crate::{Config, Stats};
+    use crate::config::{Config, Stats};
 
     #[test]
     fn skips_non_image_file_without_error() {
