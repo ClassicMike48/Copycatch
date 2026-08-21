@@ -557,16 +557,13 @@ fn unique_backup_path(backup_dir: &Path, original_file_name: &std::ffi::OsStr) -
 // Can be later expanded to check for previous program save states, and improved error messaging.
 pub fn validate_save_location(dir_path: &Path) -> Result<(), std::io::Error> {
     match dir_path.try_exists() {
-        Ok(found) => {
-            if found {
-                Ok(())
-            } else {
-                Err(io::Error::new(
-                    io::ErrorKind::NotFound,
-                    format!("Directory does not exist: {}", dir_path.display()),
-                ))
-            }
-        }
+        Ok(true) =>  Ok(()),
+        Ok(false) => {
+            Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Directory does not exist: {}", dir_path.display()),
+            ))
+        },
         Err(e) => {
             error!("Issues verifying backup folder: {}", dir_path.display());
             Err(e)
