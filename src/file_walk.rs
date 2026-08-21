@@ -228,7 +228,7 @@ fn record_comparisons(config: &mut Config, image_id: i64, phash: &PHashHexString
                 warn!(
                     "Failed to record comparison between {} and {}: {}",
                     image_id, other_id, e
-                ); 
+                );
                 config.stats.database_errors += 1;
             }
         }
@@ -474,13 +474,12 @@ pub fn analyze_folder(dir_path: &Path, config: &mut Config) -> io::Result<()> {
 mod analyze_folder_tests {
     use std::path::{Path, PathBuf};
 
-    use crate::file_walk::analyze_folder;
     use crate::config::{Config, Stats};
+    use crate::file_walk::analyze_folder;
 
     #[test]
     fn skips_non_image_file_without_error() {
-        let conn =
-            crate::db::init(Path::new(":memory:")).expect("in-memory db should initialize");
+        let conn = crate::db::init(Path::new(":memory:")).expect("in-memory db should initialize");
         let mut config = Config {
             // backup_file() is never invoked on this path, so this location is never touched.
             backup_location: PathBuf::new(),
@@ -492,7 +491,10 @@ mod analyze_folder_tests {
         analyze_folder(Path::new("samples/non_image"), &mut config)
             .expect("walking a directory of only non-image files should not error");
 
-        assert_eq!(config.stats.files_seen, 1, "the .txt file should be counted as seen");
+        assert_eq!(
+            config.stats.files_seen, 1,
+            "the .txt file should be counted as seen"
+        );
         assert_eq!(
             config.stats.image_files_seen, 0,
             "a non-image file must not be counted as an image"

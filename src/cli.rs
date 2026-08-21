@@ -31,7 +31,7 @@ pub(crate) struct CompareArgs {
 
 impl CompareArgs {
     /// Runs the compare command with the provided arguments.
-    pub(crate) fn run(&self) -> () {
+    pub(crate) fn run(&self) {
         // verify that the provided destination will work or utilize sensible defaults.
         let backup_location = handle_save_location(&self.destination_folder).unwrap();
 
@@ -39,8 +39,8 @@ impl CompareArgs {
         // Check if the database file exists at the specified location
         let db_path = backup_location.join("photo_manager.db");
         validate_db_location(&db_path).unwrap();
-        let conn = crate::db::init(&db_path)
-            .expect("Database should exist and initialize successfully");
+        let conn =
+            crate::db::init(&db_path).expect("Database should exist and initialize successfully");
         let stats = Stats::default();
         let compare_on_run = false;
         let mut config = Config {
@@ -59,20 +59,20 @@ impl CompareArgs {
 
 fn validate_db_location(db_path: &Path) -> Result<(), std::io::Error> {
     match db_path.try_exists() {
-        Ok(true) => { return Ok(())}
+        Ok(true) => Ok(()),
         Ok(false) => {
             error!(
                 "Database file does not exist at path: {}",
                 db_path.display()
             );
-            return Err(std::io::Error::new(
+            Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 "Database file does not exist",
-            ));
+            ))
         }
         Err(e) => {
             error!("Error checking database file existence: {}", e);
-            return Err(e);
+            Err(e)
         }
     }
 }
@@ -94,7 +94,7 @@ pub(crate) struct BackupArgs {
 
 impl BackupArgs {
     /// Runs the backup command with the provided arguments.
-    pub(crate) fn run(&self) -> () {
+    pub(crate) fn run(&self) {
         // verify that the provided destination will work or utilize sensible defaults.
         let backup_location = handle_save_location(&self.destination_folder).unwrap();
         let db_path = backup_location.join("photo_manager.db");
@@ -109,7 +109,7 @@ impl BackupArgs {
             compare_on_run,
         };
 
-        analyze_folder(Path::new("test"), &mut config).unwrap();
+        analyze_folder(Path::new(&self.source_folder), &mut config).unwrap();
 
         if !config.compare_on_run {
             info!("Starting image comparisons for similarities");
