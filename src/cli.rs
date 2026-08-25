@@ -2,6 +2,7 @@ use crate::config::{Config, Stats};
 use crate::file_walk::{analyze_folder, compare_all_images, validate_save_location};
 use clap::{Args, Parser, Subcommand};
 use log::{error, info};
+use std::fs::{create_dir, create_dir_all};
 use std::io::ErrorKind::NotFound;
 use std::path::{Path, PathBuf};
 
@@ -135,15 +136,23 @@ fn handle_save_location(path: &str) -> Result<PathBuf, std::io::Error> {
     };
     let backup_location = Path::new(&destination_path).to_path_buf();
     //handle return
-    match validate_save_location(Path::new(&backup_location)) {
+    match validate_save_location(&backup_location) {
         Ok(_) => Ok(backup_location),
         Err(e) => {
-            if e.kind() == NotFound && destination_path == "backup/" {
+            if e.kind() == NotFound {
                 info!(
-                    "Default backup location does not exist, creating directory: {}",
+                    "Backup location does not exist, creating directory: {}",
                     backup_location.display()
                 );
-                Err(e)
+
+                //Attempt to create the directory and pass along any errors that may occur
+                match create_dir_all(&backup_location) {
+                    Ok(_) => Ok(backup_location),
+                    Err(e) => {
+                        error!("Error creating backup directory: {}", e);
+                        Err(e)
+                    }
+                }
             } else {
                 error!("Error validating save location: {}", e);
                 Err(e)
