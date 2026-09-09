@@ -3,6 +3,20 @@
 version = 4
 
 [[package]]
+name = "Copycatch"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "env_logger",
+ "hex",
+ "image",
+ "image_hasher",
+ "log",
+ "rusqlite",
+ "sha2",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -926,20 +940,6 @@ name = "pastey"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35fb2e5f958ec131621fdd531e9fc186ed768cbe395337403ae56c17a74c68ec"
-
-[[package]]
-name = "photo_manager"
-version = "0.1.0"
-dependencies = [
- "clap",
- "env_logger",
- "hex",
- "image",
- "image_hasher",
- "log",
- "rusqlite",
- "sha2",
-]
 
 [[package]]
 name = "pkg-config"

@@ -1,6 +1,6 @@
 [package]
-name = "photo_manager"
-version = "0.1.0"
+name = "copycatch"
+version = "0.1"
 edition = "2024"
 
 [dependencies]
